@@ -1,0 +1,16 @@
+{
+  "orderId": "751918",
+  "tableNumber": "1",
+  "paymentMethod": "cash",
+  "totalAmount": 60,
+  "printedAt": "2026-10-18T10:15:59.470",
+  "items": [
+    {
+      "name": "وجبة شاورما عربي لحم",
+      "quantity": 2,
+      "unitPrice": 30,
+      "totalPrice": 60,
+      "notes": ""
+    }
+  ]
+}

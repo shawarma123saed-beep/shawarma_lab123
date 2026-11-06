@@ -1,0 +1,266 @@
+[
+  {
+    "orderId": "957048",
+    "tableNumber": "سفري",
+    "cancellationReason": "g",
+    "cancelledAt": "2026-11-01T09:52:52.327",
+    "totalAmount": 100
+  },
+  {
+    "orderId": "957048",
+    "tableNumber": "سفري",
+    "totalAmount": 100,
+    "reason": "g",
+    "cancelledAt": "2026-11-01T09:52:52.337",
+    "items": [
+      {
+        "item": {
+          "id": "1793171902671",
+          "name": "خرطوشة شاورما دجاج",
+          "price": 100,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQZCPwEMBXfPWKXq-2p4sbIwYVCDEnJGSEpDCE5SpmGdQ&s=10",
+          "category": "food"
+        },
+        "quantity": 1,
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "orderId": "371919",
+    "tableNumber": "1",
+    "cancellationReason": "das",
+    "cancelledAt": "2026-11-01T09:59:56.307",
+    "totalAmount": 950
+  },
+  {
+    "orderId": "371919",
+    "tableNumber": "1",
+    "totalAmount": 950,
+    "reason": "das",
+    "cancelledAt": "2026-11-01T09:59:56.315",
+    "items": [
+      {
+        "item": {
+          "id": "1793171835622",
+          "name": "خرطوشة شاورما لحم",
+          "price": 150,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwGCS-HMCJhtPeW7eqUAfgB2s14va5Ky6So5T7WdGYeSb85t9cU930rOE&s=10",
+          "category": "food"
+        },
+        "quantity": 1,
+        "notes": ""
+      },
+      {
+        "item": {
+          "id": "1792580084553",
+          "name": "سندويش شاورما دجاج صغير",
+          "price": 150,
+          "imageUrl": "https://th.bing.com/th/id/OIP.flxPbHhPRoD858tEd2tCwgHaFM?w=222&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3",
+          "category": "food"
+        },
+        "quantity": 1,
+        "notes": ""
+      },
+      {
+        "item": {
+          "id": "1793171335081",
+          "name": "سندويش شاورما دجاج كبير",
+          "price": 250,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT9UAPkhYPKMqH_NZlNnIuzSz1Y-8OHxNlMXb_PvvHD0arI3BnGmTuv11M&s=10",
+          "category": "food"
+        },
+        "quantity": 1,
+        "notes": ""
+      },
+      {
+        "item": {
+          "id": "1793171466462",
+          "name": "سندويش شاورما عربي",
+          "price": 400,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQTsQDs-vPqZi_BFt2rCTCghWLJ-z4iA6VzfjoS8RyqNA&s=10",
+          "category": "food"
+        },
+        "quantity": 1,
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "orderId": "654927",
+    "tableNumber": "1",
+    "cancellationReason": "مني",
+    "cancelledAt": "2026-11-04T17:45:32.054",
+    "totalAmount": 450
+  },
+  {
+    "orderId": "654927",
+    "tableNumber": "1",
+    "totalAmount": 450,
+    "reason": "مني",
+    "cancelledAt": "2026-11-04T17:45:32.060",
+    "items": [
+      {
+        "id": "1792417819564",
+        "name": "سندويش شاورما لحم كبير",
+        "price": 450,
+        "quantity": 1,
+        "totalPrice": 450,
+        "notes": ""
+      }
+    ]
+  },
+  {
+    "orderId": "244809",
+    "tableNumber": "سفري",
+    "cancellationReason": "drdfhgf",
+    "cancelledAt": "2026-11-04T21:36:36.091",
+    "totalAmount": 850
+  },
+  {
+    "orderId": "244809",
+    "tableNumber": "سفري",
+    "totalAmount": 850,
+    "reason": "drdfhgf",
+    "cancelledAt": "2026-11-04T21:36:36.094",
+    "items": [
+      {
+        "id": "1793171835622",
+        "name": "خرطوشة شاورما لحم",
+        "price": 150,
+        "quantity": 3,
+        "totalPrice": 450,
+        "notes": "",
+        "item": {
+          "id": "1793171835622",
+          "name": "خرطوشة شاورما لحم",
+          "price": 150,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwGCS-HMCJhtPeW7eqUAfgB2s14va5Ky6So5T7WdGYeSb85t9cU930rOE&s=10",
+          "category": "food"
+        }
+      },
+      {
+        "id": "1793171610258",
+        "name": "سندويش شاورما لحم صغير",
+        "price": 250,
+        "quantity": 1,
+        "totalPrice": 250,
+        "notes": "wddad",
+        "item": {
+          "id": "1793171610258",
+          "name": "سندويش شاورما لحم صغير",
+          "price": 250,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRV0k8G4dqlsAuka546nYdvutfqVMywnNmu-k1VS9SXNA&s=10",
+          "category": "food"
+        }
+      },
+      {
+        "id": "1792474762565",
+        "name": "مخلل",
+        "price": 50,
+        "quantity": 1,
+        "totalPrice": 50,
+        "notes": "",
+        "item": {
+          "id": "1792474762565",
+          "name": "مخلل",
+          "price": 50,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT6wnQtmw7wAHp7-PwiYo-zPlU7_e000NuvOStEIPuixw&s=10",
+          "category": "food"
+        }
+      },
+      {
+        "id": "1793172458186",
+        "name": "كريم ثوم",
+        "price": 50,
+        "quantity": 1,
+        "totalPrice": 50,
+        "notes": "",
+        "item": {
+          "id": "1793172458186",
+          "name": "كريم ثوم",
+          "price": 50,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcStX0e8EgfIry0CW2HjZBLITOf-YFjdhvrfx8KF1TTWhA&s=10",
+          "category": "food"
+        }
+      },
+      {
+        "id": "1793172704631",
+        "name": "كريم ثوم حد",
+        "price": 50,
+        "quantity": 1,
+        "totalPrice": 50,
+        "notes": "",
+        "item": {
+          "id": "1793172704631",
+          "name": "كريم ثوم حد",
+          "price": 50,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQt4z55arj4JHIS95CTJp4Bq_lnCBjwwI5QsJQLxmWCWw&s=10",
+          "category": "food"
+        }
+      }
+    ]
+  },
+  {
+    "orderId": "852578",
+    "tableNumber": "سفري",
+    "cancellationReason": "شسي",
+    "cancelledAt": "2026-11-06T12:21:00.793",
+    "totalAmount": 150
+  },
+  {
+    "orderId": "852578",
+    "tableNumber": "سفري",
+    "totalAmount": 150,
+    "reason": "شسي",
+    "cancelledAt": "2026-11-06T12:21:00.801",
+    "items": [
+      {
+        "id": "1793171835622",
+        "name": "خرطوشة شاورما لحم",
+        "price": 150,
+        "quantity": 1,
+        "totalPrice": 150,
+        "notes": "",
+        "item": {
+          "id": "1793171835622",
+          "name": "خرطوشة شاورما لحم",
+          "price": 150,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwGCS-HMCJhtPeW7eqUAfgB2s14va5Ky6So5T7WdGYeSb85t9cU930rOE&s=10",
+          "category": "food"
+        }
+      }
+    ]
+  },
+  {
+    "orderId": "561245",
+    "tableNumber": "سفري",
+    "cancellationReason": "سيشي",
+    "cancelledAt": "2026-11-06T13:22:50.286",
+    "totalAmount": 150
+  },
+  {
+    "orderId": "561245",
+    "tableNumber": "سفري",
+    "totalAmount": 150,
+    "reason": "سيشي",
+    "cancelledAt": "2026-11-06T13:22:50.294",
+    "items": [
+      {
+        "id": "1793171835622",
+        "name": "خرطوشة شاورما لحم",
+        "price": 150,
+        "quantity": 1,
+        "totalPrice": 150,
+        "notes": "",
+        "item": {
+          "id": "1793171835622",
+          "name": "خرطوشة شاورما لحم",
+          "price": 150,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwGCS-HMCJhtPeW7eqUAfgB2s14va5Ky6So5T7WdGYeSb85t9cU930rOE&s=10",
+          "category": "food"
+        }
+      }
+    ]
+  }
+]

@@ -1,0 +1,31 @@
+{
+  "orderId": "658604",
+  "tableNumber": "سفري",
+  "totalAmount": 30,
+  "reason": "س",
+  "cancelledAt": "2026-10-15T09:44:39.298",
+  "items": [
+    {
+      "item": {
+        "id": "m1",
+        "name": "وجبة شاورما عربي دجاج",
+        "price": 25,
+        "imageUrl": "https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=500",
+        "category": "food"
+      },
+      "quantity": 1,
+      "notes": "شسيش"
+    },
+    {
+      "item": {
+        "id": "d3",
+        "name": "سبرايت",
+        "price": 5,
+        "imageUrl": "https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?w=500",
+        "category": "drink"
+      },
+      "quantity": 1,
+      "notes": ""
+    }
+  ]
+}

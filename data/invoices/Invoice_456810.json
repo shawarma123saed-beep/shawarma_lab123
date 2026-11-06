@@ -1,0 +1,23 @@
+{
+  "orderId": "456810",
+  "tableNumber": "سفري",
+  "paymentMethod": "cash",
+  "totalAmount": 60000,
+  "printedAt": "2026-10-19T15:22:25.407",
+  "items": [
+    {
+      "name": "ابو كلب",
+      "quantity": 2,
+      "unitPrice": 20000,
+      "totalPrice": 40000,
+      "notes": ""
+    },
+    {
+      "name": "عرق الريان",
+      "quantity": 1,
+      "unitPrice": 20000,
+      "totalPrice": 20000,
+      "notes": ""
+    }
+  ]
+}

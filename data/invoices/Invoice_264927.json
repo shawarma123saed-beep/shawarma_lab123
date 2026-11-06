@@ -1,0 +1,33 @@
+{
+  "orderId": "264927",
+  "tableNumber": "سفري",
+  "paymentMethod": "shamCash",
+  "totalAmount": 85,
+  "printedAt": "2026-10-07T14:59:11.304",
+  "items": [
+    {
+      "name": "وجبة شاورما عربي دجاج",
+      "quantity": 1,
+      "unitPrice": 25,
+      "totalPrice": 25
+    },
+    {
+      "name": "وجبة شاورما عربي لحم",
+      "quantity": 1,
+      "unitPrice": 30,
+      "totalPrice": 30
+    },
+    {
+      "name": "سندويش شاورما دجاج",
+      "quantity": 1,
+      "unitPrice": 12,
+      "totalPrice": 12
+    },
+    {
+      "name": "سندويش شاورما لحم",
+      "quantity": 1,
+      "unitPrice": 18,
+      "totalPrice": 18
+    }
+  ]
+}

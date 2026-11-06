@@ -1,0 +1,26 @@
+[
+  {
+    "id": "EMP-1793815411470-8204",
+    "name": "الحشاش",
+    "department": "المطبخ",
+    "jobTitle": "كاشير رئيسي",
+    "shift": "صباحي",
+    "shiftTime": "8:00 ص - 12:00 ليلا",
+    "salary": 1000,
+    "paidAmount": 0,
+    "advanceAmount": 0,
+    "status": "نشط"
+  },
+  {
+    "id": "EMP-1793883025942-9023",
+    "name": "حسين",
+    "department": "المطبخ",
+    "jobTitle": "شيف شاورما رئيسي",
+    "shift": "صباحي",
+    "shiftTime": "8:00 ص - 12:00 ليلا",
+    "salary": 1000,
+    "paidAmount": 0,
+    "advanceAmount": 0,
+    "status": "نشط"
+  }
+]

@@ -1,0 +1,200 @@
+[
+  {
+    "id": "1793171835622",
+    "name": "خرطوشة شاورما لحم",
+    "category": "وجبات شاورما",
+    "price": 150,
+    "isAvailable": true,
+    "description": "خرطوشة تسكت جوعك يا غالي",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwGCS-HMCJhtPeW7eqUAfgB2s14va5Ky6So5T7WdGYeSb85t9cU930rOE&s=10"
+  },
+  {
+    "id": "1793171610258",
+    "name": "سندويش شاورما لحم صغير",
+    "category": "وجبات شاورما",
+    "price": 250,
+    "isAvailable": true,
+    "description": "شاورما غنم ابو راتب",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRV0k8G4dqlsAuka546nYdvutfqVMywnNmu-k1VS9SXNA&s=10"
+  },
+  {
+    "id": "1792417819564",
+    "name": "سندويش شاورما لحم كبير",
+    "category": "وجبات شاورما",
+    "price": 450,
+    "isAvailable": true,
+    "description": "شاورما لحم غنم شغل ابو راتب",
+    "image": "https://tse1.mm.bing.net/th/id/OIP.fb4rnPiGjYOoeGu1q39ZqwHaE8?r=0&pid=ImgDet&w=184&h=122&c=7&dpr=1,3&o=7&rm=3"
+  },
+  {
+    "id": "1793171673801",
+    "name": "سندويش شاورما لحم عربي",
+    "category": "وجبات شاورما",
+    "price": 750,
+    "isAvailable": true,
+    "description": "شاورما لحم عربي",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRPA0oMxH3XszdPF0ThG-RZXbx8XM7cjU6bschrn2Jj0w&s=10"
+  },
+  {
+    "id": "1793171902671",
+    "name": "خرطوشة شاورما دجاج",
+    "category": "وجبات شاورما",
+    "price": 100,
+    "isAvailable": true,
+    "description": "خرطوشة كاش والتانية ببلاش",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQZCPwEMBXfPWKXq-2p4sbIwYVCDEnJGSEpDCE5SpmGdQ&s=10"
+  },
+  {
+    "id": "1792580084553",
+    "name": "سندويش شاورما دجاج صغير",
+    "category": "وجبات شاورما",
+    "price": 150,
+    "isAvailable": true,
+    "description": "شاورما دجاج",
+    "image": "https://th.bing.com/th/id/OIP.flxPbHhPRoD858tEd2tCwgHaFM?w=222&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3"
+  },
+  {
+    "id": "1793171335081",
+    "name": "سندويش شاورما دجاج كبير",
+    "category": "وجبات شاورما",
+    "price": 250,
+    "isAvailable": true,
+    "description": "شاورما كبيرة دراع",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT9UAPkhYPKMqH_NZlNnIuzSz1Y-8OHxNlMXb_PvvHD0arI3BnGmTuv11M&s=10"
+  },
+  {
+    "id": "1793171466462",
+    "name": "سندويش شاورما عربي",
+    "category": "وجبات شاورما",
+    "price": 400,
+    "isAvailable": true,
+    "description": "شاورما عربي",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQTsQDs-vPqZi_BFt2rCTCghWLJ-z4iA6VzfjoS8RyqNA&s=10"
+  },
+  {
+    "id": "1793172083607",
+    "name": "شاورما جاج فرط 1 كيلو",
+    "category": "وجبات شاورما",
+    "price": 1800,
+    "isAvailable": true,
+    "description": "شغلة عالبغلة",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSSjuKyqozDbYIkf1BZBs2y-n17R33Xmpx-k5tYRQUGhQ&s"
+  },
+  {
+    "id": "1793020304128",
+    "name": "سندويش بطاطا مقلية سمون",
+    "category": "وجبات شاورما",
+    "price": 150,
+    "isAvailable": true,
+    "description": "بطاطا طيبة",
+    "image": "https://www.bing.com/th/id/OIP.6CaYkobkXXltur9s357QLwHaE2?w=193&h=135&c=8&rs=1&qlt=90&o=6&dpr=1.3&pid=ImgAns&rm=2"
+  },
+  {
+    "id": "1792474762565",
+    "name": "مخلل",
+    "category": "مقبلات وإضافات",
+    "price": 50,
+    "isAvailable": true,
+    "description": "مخللات يا حياتي",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT6wnQtmw7wAHp7-PwiYo-zPlU7_e000NuvOStEIPuixw&s=10"
+  },
+  {
+    "id": "1793172458186",
+    "name": "كريم ثوم",
+    "category": "مقبلات وإضافات",
+    "price": 50,
+    "isAvailable": true,
+    "description": "ميونيز",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcStX0e8EgfIry0CW2HjZBLITOf-YFjdhvrfx8KF1TTWhA&s=10"
+  },
+  {
+    "id": "1793172704631",
+    "name": "كريم ثوم حد",
+    "category": "مقبلات وإضافات",
+    "price": 50,
+    "isAvailable": true,
+    "description": "اححححح",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQt4z55arj4JHIS95CTJp4Bq_lnCBjwwI5QsJQLxmWCWw&s=10"
+  },
+  {
+    "id": "1793172776658",
+    "name": "صوص الكوكتيل",
+    "category": "مقبلات وإضافات",
+    "price": 50,
+    "isAvailable": true,
+    "description": "كوكتيل",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTTio4z1oEABe8QmQ63F0tA7qW3fRm79j-NNaY8XpzMig&s=10"
+  },
+  {
+    "id": "1793172825907",
+    "name": "صوص طحينية",
+    "category": "مقبلات وإضافات",
+    "price": 50,
+    "isAvailable": true,
+    "description": "سر",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRxgF6gU9HbXHzpRL1dTqNnddwwF_mC6v6UjrpOmnkRvg&s=10"
+  },
+  {
+    "id": "1792475918430",
+    "name": "بيبسي دايت",
+    "category": "مشروبات",
+    "price": 80,
+    "isAvailable": true,
+    "description": "بيبسي",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQdCyZI5kGCvf4glA5bj2I3JMMKhPzk_7KDJiDT3ZFwog&s=10"
+  },
+  {
+    "id": "1793172990018",
+    "name": "بيبسي",
+    "category": "مشروبات",
+    "price": 80,
+    "isAvailable": true,
+    "description": "بيبسي ابو سمنة",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT1a_2vzARv57OEvBC2uK_mMlvRI7YBByb1tvQ9GY_fMQ&s=10"
+  },
+  {
+    "id": "1793172929156",
+    "name": "عصير برتقال",
+    "category": "مشروبات",
+    "price": 100,
+    "isAvailable": true,
+    "description": "عصير عصور",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ6gL-0WJGSY76XiPhkpkplbUIIGE_RLPQvGbpXav_4qg&s=10"
+  },
+  {
+    "id": "1793173066686",
+    "name": "بيبسي كبير",
+    "category": "مشروبات",
+    "price": 240,
+    "isAvailable": true,
+    "description": "بيبسي حرام",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQN9eA8kOKpao1grkiUHhhf2REoMN2vMlCDqpCpYgW7ZQ&s"
+  },
+  {
+    "id": "1793173170446",
+    "name": "ميرندا تفاح",
+    "category": "مشروبات",
+    "price": 240,
+    "isAvailable": true,
+    "description": "مزمز ميرندا",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTloBdluAOFndc1cbqoqSGXgCSYZLmm5BYZdvX92piQLg&s"
+  },
+  {
+    "id": "1793173351072",
+    "name": "ميرندا برتقال",
+    "category": "مشروبات",
+    "price": 240,
+    "isAvailable": true,
+    "description": "مزمز برتقال",
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS8B6_ZaIOUEGaPMJGLLpIqZhAkxTWOuQzKWCBaosNNQDHdMzKtInGuPc7u&s=10"
+  },
+  {
+    "id": "1792561912079",
+    "name": "ماء",
+    "category": "مشروبات",
+    "price": 20,
+    "isAvailable": true,
+    "description": "مي طيبة",
+    "image": "https://th.bing.com/th/id/OIP.OG3muY0bnTk5MzsIlA1LpQHaDt?w=320&h=180&c=7&r=0&o=7&dpr=1.3&pid=1.7&rm=3"
+  }
+]

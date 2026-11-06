@@ -1,0 +1,51 @@
+{
+  "orderId": "396006",
+  "tableNumber": "سفري",
+  "paymentMethod": "cash",
+  "totalAmount": 114,
+  "printedAt": "2026-10-07T15:23:45.874",
+  "items": [
+    {
+      "name": "وجبة شاورما عربي دجاج",
+      "quantity": 1,
+      "unitPrice": 25,
+      "totalPrice": 25
+    },
+    {
+      "name": "وجبة شاورما عربي لحم",
+      "quantity": 1,
+      "unitPrice": 30,
+      "totalPrice": 30
+    },
+    {
+      "name": "سندويش شاورما دجاج",
+      "quantity": 2,
+      "unitPrice": 12,
+      "totalPrice": 24
+    },
+    {
+      "name": "وجبة بطاطا مقلية",
+      "quantity": 2,
+      "unitPrice": 10,
+      "totalPrice": 20
+    },
+    {
+      "name": "فانتا برتقال",
+      "quantity": 1,
+      "unitPrice": 5,
+      "totalPrice": 5
+    },
+    {
+      "name": "كوكاكولا بارد",
+      "quantity": 1,
+      "unitPrice": 5,
+      "totalPrice": 5
+    },
+    {
+      "name": "سبرايت",
+      "quantity": 1,
+      "unitPrice": 5,
+      "totalPrice": 5
+    }
+  ]
+}

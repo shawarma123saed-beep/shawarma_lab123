@@ -1,0 +1,21 @@
+{
+  "orderId": "893455",
+  "tableNumber": "سفري",
+  "paymentMethod": "shamCash",
+  "totalAmount": 70,
+  "printedAt": "2026-10-07T15:08:48.986",
+  "items": [
+    {
+      "name": "وجبة شاورما عربي لحم",
+      "quantity": 2,
+      "unitPrice": 30,
+      "totalPrice": 60
+    },
+    {
+      "name": "فانتا برتقال",
+      "quantity": 2,
+      "unitPrice": 5,
+      "totalPrice": 10
+    }
+  ]
+}

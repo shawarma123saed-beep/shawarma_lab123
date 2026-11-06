@@ -1,0 +1,20 @@
+{
+  "orderId": "407517",
+  "tableNumber": "1",
+  "items": [
+    {
+      "item": {
+        "id": "1792331381175",
+        "name": "عرق الريان",
+        "price": 20000,
+        "imageUrl": "https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=500",
+        "category": "drink"
+      },
+      "quantity": 1,
+      "notes": ""
+    }
+  ],
+  "totalPrice": 20000,
+  "paymentMethod": "shamCash",
+  "timestamp": "2026-10-19T15:20:07.522"
+}

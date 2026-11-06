@@ -1,0 +1,20 @@
+{
+  "orderId": "244459",
+  "tableNumber": "1",
+  "totalAmount": 50,
+  "reason": "خريمة",
+  "cancelledAt": "2026-10-18T10:15:29.883",
+  "items": [
+    {
+      "item": {
+        "id": "1",
+        "name": "وجبة شاورما عربي دجاج",
+        "price": 25,
+        "imageUrl": "https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=500",
+        "category": "food"
+      },
+      "quantity": 2,
+      "notes": ""
+    }
+  ]
+}

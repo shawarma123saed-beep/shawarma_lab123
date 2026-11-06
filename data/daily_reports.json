@@ -1,0 +1,254 @@
+[
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-10-28",
+    "time": "9:11",
+    "closedAt": "2026-10-28T09:11:19.581",
+    "totalSales": 8515,
+    "cashSales": 8515,
+    "shamCashSales": 0,
+    "paidInvoicesCount": 1,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 8515,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-10-28",
+    "time": "9:53",
+    "closedAt": "2026-10-28T09:53:52.595",
+    "totalSales": 2820,
+    "cashSales": 2820,
+    "shamCashSales": 0,
+    "paidInvoicesCount": 2,
+    "cancelledInvoicesCount": 1,
+    "totalExpenses": 100,
+    "netBalance": 2720,
+    "expensesList": [
+      {
+        "title": "كوندوم",
+        "amount": 100,
+        "time": "2026-10-28T09:53:47.064"
+      }
+    ]
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-10-28",
+    "time": "10:46",
+    "closedAt": "2026-10-28T10:46:02.498",
+    "totalSales": 2820,
+    "cashSales": 2820,
+    "shamCashSales": 0,
+    "paidInvoicesCount": 2,
+    "cancelledInvoicesCount": 1,
+    "totalExpenses": 100,
+    "netBalance": 2720,
+    "expensesList": [
+      {
+        "title": "كوندوم",
+        "amount": 100,
+        "time": "2026-10-28T09:53:47.064"
+      }
+    ]
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-10-28",
+    "time": "12:39",
+    "closedAt": "2026-10-28T12:39:32.531",
+    "totalSales": 5670,
+    "cashSales": 150,
+    "shamCashSales": 5520,
+    "paidInvoicesCount": 4,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 411,
+    "netBalance": 5259,
+    "expensesList": [
+      {
+        "title": "شيبس للكبير",
+        "amount": 111,
+        "time": "2026-10-28T12:39:08.482"
+      },
+      {
+        "title": "كوندوم لابن خالتي",
+        "amount": 200,
+        "time": "2026-10-28T12:39:16.025"
+      },
+      {
+        "title": "فزلين للكاشير",
+        "amount": 100,
+        "time": "2026-10-28T12:39:24.117"
+      }
+    ]
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-10-30",
+    "time": "11:26",
+    "closedAt": "2026-10-30T11:26:36.656",
+    "totalSales": 400,
+    "cashSales": 0,
+    "shamCashSales": 400,
+    "paidInvoicesCount": 1,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 400,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-10-30",
+    "time": "12:16",
+    "closedAt": "2026-10-30T12:16:40.555",
+    "totalSales": 5610,
+    "cashSales": 5610,
+    "shamCashSales": 0,
+    "paidInvoicesCount": 6,
+    "cancelledInvoicesCount": 1,
+    "totalExpenses": 0,
+    "netBalance": 5610,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-01",
+    "time": "0:09",
+    "closedAt": "2026-11-01T00:09:07.099",
+    "totalSales": 3250,
+    "cashSales": 450,
+    "shamCashSales": 2800,
+    "paidInvoicesCount": 4,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 3250,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-01",
+    "time": "10:20",
+    "closedAt": "2026-11-01T10:20:43.553",
+    "totalSales": 250,
+    "cashSales": 250,
+    "shamCashSales": 0,
+    "paidInvoicesCount": 1,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 250,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-01",
+    "time": "10:53",
+    "closedAt": "2026-11-01T10:53:23.980",
+    "totalSales": 690,
+    "cashSales": 0,
+    "shamCashSales": 690,
+    "paidInvoicesCount": 1,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 690,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-01",
+    "time": "12:32",
+    "closedAt": "2026-11-01T12:32:19.490",
+    "totalSales": 1000,
+    "cashSales": 1000,
+    "shamCashSales": 0,
+    "paidInvoicesCount": 4,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 1000,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-01",
+    "time": "12:38",
+    "closedAt": "2026-11-01T12:38:15.797",
+    "totalSales": 150,
+    "cashSales": 0,
+    "shamCashSales": 150,
+    "paidInvoicesCount": 1,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 150,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-02",
+    "time": "15:43",
+    "closedAt": "2026-11-02T15:43:06.001",
+    "totalSales": 4000,
+    "cashSales": 2650,
+    "shamCashSales": 1350,
+    "paidInvoicesCount": 10,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 4000,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-03",
+    "time": "23:41",
+    "closedAt": "2026-11-03T23:41:28.663",
+    "totalSales": 2850,
+    "cashSales": 2450,
+    "shamCashSales": 400,
+    "paidInvoicesCount": 8,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 2850,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-04",
+    "time": "17:45",
+    "closedAt": "2026-11-04T17:45:43.578",
+    "totalSales": 8160,
+    "cashSales": 7010,
+    "shamCashSales": 1150,
+    "paidInvoicesCount": 21,
+    "cancelledInvoicesCount": 1,
+    "totalExpenses": 0,
+    "netBalance": 8160,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-04",
+    "time": "21:38",
+    "closedAt": "2026-11-04T21:38:29.997",
+    "totalSales": 26460,
+    "cashSales": 11730,
+    "shamCashSales": 14730,
+    "paidInvoicesCount": 3,
+    "cancelledInvoicesCount": 1,
+    "totalExpenses": 0,
+    "netBalance": 26460,
+    "expensesList": []
+  },
+  {
+    "cashierName": "كاشير الصالة",
+    "date": "2026-11-05",
+    "time": "15:56",
+    "closedAt": "2026-11-05T15:56:45.726",
+    "totalSales": 3280,
+    "cashSales": 3130,
+    "shamCashSales": 150,
+    "paidInvoicesCount": 9,
+    "cancelledInvoicesCount": 0,
+    "totalExpenses": 0,
+    "netBalance": 3280,
+    "expensesList": []
+  }
+]

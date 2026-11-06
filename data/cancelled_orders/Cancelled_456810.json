@@ -1,0 +1,31 @@
+{
+  "orderId": "456810",
+  "tableNumber": "سفري",
+  "totalAmount": 60000,
+  "reason": "lu",
+  "cancelledAt": "2026-10-19T16:00:12.105",
+  "items": [
+    {
+      "item": {
+        "id": "1792331354815",
+        "name": "ابو كلب",
+        "price": 20000,
+        "imageUrl": "https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=500",
+        "category": "food"
+      },
+      "quantity": 2,
+      "notes": ""
+    },
+    {
+      "item": {
+        "id": "1792331381175",
+        "name": "عرق الريان",
+        "price": 20000,
+        "imageUrl": "https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=500",
+        "category": "drink"
+      },
+      "quantity": 1,
+      "notes": ""
+    }
+  ]
+}

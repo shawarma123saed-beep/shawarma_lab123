@@ -1,0 +1,218 @@
+[
+  {
+    "id": "909698",
+    "orderId": "909698",
+    "tableNumber": "سفري",
+    "items": [
+      {
+        "id": "1792417819564",
+        "name": "سندويش شاورما لحم كبير",
+        "price": 450,
+        "quantity": 1,
+        "totalPrice": 450,
+        "notes": "",
+        "item": {
+          "id": "1792417819564",
+          "name": "سندويش شاورما لحم كبير",
+          "price": 450,
+          "imageUrl": "https://tse1.mm.bing.net/th/id/OIP.fb4rnPiGjYOoeGu1q39ZqwHaE8?r=0&pid=ImgDet&w=184&h=122&c=7&dpr=1,3&o=7&rm=3",
+          "category": "food"
+        }
+      }
+    ],
+    "status": "CONFIRMED",
+    "paymentMethod": "cash",
+    "paymentDetails": null,
+    "createdAt": "2026-11-06T13:11:49.699",
+    "cancelReason": null,
+    "isDelivery": false,
+    "customerName": null,
+    "customerPhone": null,
+    "deliveryAddress": null,
+    "totalAmount": 450,
+    "total": 450,
+    "totalAmountSYP": 450,
+    "totalAmountUSD": null,
+    "fromCustomerApp": false
+  },
+  {
+    "id": "901245",
+    "orderId": "901245",
+    "tableNumber": "سفري",
+    "items": [
+      {
+        "id": "1793171835622",
+        "name": "خرطوشة شاورما لحم",
+        "price": 150,
+        "quantity": 2,
+        "totalPrice": 300,
+        "notes": "",
+        "item": {
+          "id": "1793171835622",
+          "name": "خرطوشة شاورما لحم",
+          "price": 150,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwGCS-HMCJhtPeW7eqUAfgB2s14va5Ky6So5T7WdGYeSb85t9cU930rOE&s=10",
+          "category": "food"
+        }
+      }
+    ],
+    "status": "CONFIRMED",
+    "paymentMethod": "shamCash",
+    "paymentDetails": null,
+    "createdAt": "2026-11-06T13:28:21.245",
+    "cancelReason": null,
+    "isDelivery": false,
+    "customerName": null,
+    "customerPhone": null,
+    "deliveryAddress": null,
+    "totalAmount": 300,
+    "total": 300,
+    "totalAmountSYP": 300,
+    "totalAmountUSD": null,
+    "fromCustomerApp": false
+  },
+  {
+    "id": "300814",
+    "orderId": "300814",
+    "tableNumber": "سفري",
+    "items": [
+      {
+        "id": "1793171835622",
+        "name": "خرطوشة شاورما لحم",
+        "price": 150,
+        "quantity": 1,
+        "totalPrice": 150,
+        "notes": "",
+        "item": {
+          "id": "1793171835622",
+          "name": "خرطوشة شاورما لحم",
+          "price": 150,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwGCS-HMCJhtPeW7eqUAfgB2s14va5Ky6So5T7WdGYeSb85t9cU930rOE&s=10",
+          "category": "food"
+        }
+      }
+    ],
+    "status": "CONFIRMED",
+    "paymentMethod": "shamCash",
+    "paymentDetails": null,
+    "createdAt": "2026-11-06T13:18:20.815",
+    "cancelReason": null,
+    "isDelivery": false,
+    "customerName": null,
+    "customerPhone": null,
+    "deliveryAddress": null,
+    "totalAmount": 150,
+    "total": 150,
+    "totalAmountSYP": 150,
+    "totalAmountUSD": null,
+    "fromCustomerApp": false
+  },
+  {
+    "id": "101732",
+    "orderId": "101732",
+    "tableNumber": "سفري",
+    "items": [
+      {
+        "id": "1793171610258",
+        "name": "سندويش شاورما لحم صغير",
+        "price": 250,
+        "quantity": 2,
+        "totalPrice": 500,
+        "notes": "",
+        "item": {
+          "id": "1793171610258",
+          "name": "سندويش شاورما لحم صغير",
+          "price": 250,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRV0k8G4dqlsAuka546nYdvutfqVMywnNmu-k1VS9SXNA&s=10",
+          "category": "food"
+        }
+      }
+    ],
+    "status": "CONFIRMED",
+    "paymentMethod": "shamCash",
+    "paymentDetails": null,
+    "createdAt": "2026-11-06T13:15:01.733",
+    "cancelReason": null,
+    "isDelivery": false,
+    "customerName": null,
+    "customerPhone": null,
+    "deliveryAddress": null,
+    "totalAmount": 500,
+    "total": 500,
+    "totalAmountSYP": 500,
+    "totalAmountUSD": null,
+    "fromCustomerApp": false
+  },
+  {
+    "id": "845134",
+    "orderId": "845134",
+    "tableNumber": "سفري",
+    "items": [
+      {
+        "id": "1792417819564",
+        "name": "سندويش شاورما لحم كبير",
+        "price": 450,
+        "quantity": 2,
+        "totalPrice": 900,
+        "notes": "",
+        "item": {
+          "id": "1792417819564",
+          "name": "سندويش شاورما لحم كبير",
+          "price": 450,
+          "imageUrl": "https://tse1.mm.bing.net/th/id/OIP.fb4rnPiGjYOoeGu1q39ZqwHaE8?r=0&pid=ImgDet&w=184&h=122&c=7&dpr=1,3&o=7&rm=3",
+          "category": "food"
+        }
+      }
+    ],
+    "status": "CONFIRMED",
+    "paymentMethod": "cash",
+    "paymentDetails": null,
+    "createdAt": "2026-11-06T13:10:45.135",
+    "cancelReason": null,
+    "isDelivery": false,
+    "customerName": null,
+    "customerPhone": null,
+    "deliveryAddress": null,
+    "totalAmount": 900,
+    "total": 900,
+    "totalAmountSYP": 900,
+    "totalAmountUSD": null,
+    "fromCustomerApp": false
+  },
+  {
+    "id": "408295",
+    "orderId": "408295",
+    "tableNumber": "سفري",
+    "items": [
+      {
+        "id": "1793171835622",
+        "name": "خرطوشة شاورما لحم",
+        "price": 150,
+        "quantity": 1,
+        "totalPrice": 150,
+        "notes": "",
+        "item": {
+          "id": "1793171835622",
+          "name": "خرطوشة شاورما لحم",
+          "price": 150,
+          "imageUrl": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQwGCS-HMCJhtPeW7eqUAfgB2s14va5Ky6So5T7WdGYeSb85t9cU930rOE&s=10",
+          "category": "food"
+        }
+      }
+    ],
+    "status": "CONFIRMED",
+    "paymentMethod": "shamCash",
+    "paymentDetails": null,
+    "createdAt": "2026-11-06T13:36:48.296",
+    "cancelReason": null,
+    "isDelivery": false,
+    "customerName": null,
+    "customerPhone": null,
+    "deliveryAddress": null,
+    "totalAmount": 150,
+    "total": 150,
+    "totalAmountSYP": 150,
+    "totalAmountUSD": null,
+    "fromCustomerApp": false
+  }
+]
