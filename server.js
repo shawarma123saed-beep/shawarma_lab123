@@ -16,6 +16,12 @@ const io = new Server(server, {
   cors: { origin: "*" }
 });
 
+// ==================== 🚀 مسار جذري لمنع خطأ 502 والاستجابة للمنصة ==================== //
+
+app.get('/', (req, res) => {
+  res.send('🚀 Shawarma Lab Server is Running Successfully!');
+});
+
 // ==================== 📁 مسارات حفظ البيانات ==================== //
 
 const dataDir = path.join(__dirname, 'data');
@@ -445,13 +451,11 @@ const notifyOrderReady = (orderData) => {
     status: 'ready'
   };
 
-  // 🛵 التعديل المطلوب: إرسال الطلب لشاشة الدليفري حصراً وفقط عندما يصبح الطلب جاهزاً بالمطبخ
   if (readyPayload.isDelivery === true) {
     io.emit('driver_new_order', readyPayload);
     console.log(`🛵 تم إرسال طلب الدليفري الجاهز #${orderId} بكل تفاصيله لشاشة السائقين بنجاح`);
   }
 
-  // 🛑 منع الإشعار والنغمة حصراً إذا كان الطلب منشأً من الكاشير ولم يأتِ عبر التطبيق
   const isFromCashier = 
     readyPayload.fromCustomerApp !== true && 
     (readyPayload.fromCashier === true || 
