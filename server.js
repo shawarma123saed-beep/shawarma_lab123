@@ -110,7 +110,7 @@ const normalizeOrderId = (id) => {
   return String(id);
 };
 
-// ==================== 🟢 تهيئة الملفات ==================== //
+// ==================== 🟢 تهيئة الملفات (مع الحفاظ على البيانات الموجودة وعدم تصفيرها) ==================== //
 
 const initializeJsonFile = (filePath) => {
   if (!fs.existsSync(filePath)) {
@@ -119,8 +119,16 @@ const initializeJsonFile = (filePath) => {
       JSON.stringify([], null, 2),
       'utf8'
     );
-
-    console.log('📄 تم إنشاء الملف:', path.basename(filePath));
+    console.log('📄 تم إنشاء الملف الافتراضي:', path.basename(filePath));
+  } else {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      if (content.trim() === '') {
+        fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
+      }
+    } catch (e) {
+      fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
+    }
   }
 };
 
@@ -1008,7 +1016,6 @@ io.on('connection', (socket) => {
         '| الرقم:',
         orderId
       );
-      // تم إلغاء الإرسال المباشر لشاشة السائق هنا، ولن يرسل إلا عند جهوزية المطبخ عبر notifyOrderReady
     } else {
       console.log(
         '📥 تم استقبال طلب زبون وإرساله للكاشير فقط:',
@@ -1156,12 +1163,11 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // إذا تم إرسال الطلب من الكاشير مباشرة (وليس عبر سكت طلب الزبون)
     const normalizedOrder = {
       ...orderData,
       id: orderId,
       orderId: orderId,
-      fromCustomerApp: orderData.fromCustomerApp === true, // الحفاظ على حالتها إن وجدت أو اعتبارها من الكاشير
+      fromCustomerApp: orderData.fromCustomerApp === true,
     };
 
     const activeIndex = serverActiveOrders.findIndex(
@@ -1478,7 +1484,7 @@ io.on('connection', (socket) => {
 
 // ==================== 🚀 تشغيل السيرفر ==================== //
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
 
