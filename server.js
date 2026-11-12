@@ -670,13 +670,13 @@ io.on('connection', (socket) => {
 
   socket.emit('initial_kitchen_orders', kitchenOrders);
 
-  // ==================== 📦 طلبات الكاشير (مزامنة فورية كاملة) ==================== //
+  // ==================== 📦 طلبات الكاشير ==================== //
 
   socket.on('get_active_orders', () => {
     socket.emit('initial_orders', serverActiveOrders);
 
     console.log(
-      `📦 تم إرسال ${serverActiveOrders.length} طلب نشط للكاشير والمدير`
+      `📦 تم إرسال ${serverActiveOrders.length} طلب نشط للكاشير`
     );
   });
 
@@ -970,7 +970,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== 📥 استقبال طلبات الزبائن (تحديث لحظي للكاشير والمدير) ==================== //
+  // ==================== 📥 استقبال طلبات الزبائن ==================== //
 
   socket.on('send_order', (orderData) => {
 
@@ -1010,20 +1010,18 @@ io.on('connection', (socket) => {
       };
     }
 
-    // 🌟 بث الطلب النشط لجميع شاشات الكاشير والمدير لحظياً
     io.emit('new_order_to_cashier', normalizedOrder);
-    io.emit('initial_orders', serverActiveOrders);
 
     if (normalizedOrder.isDelivery) {
       console.log(
-        '🛵 تم استقبال طلب دليفري وإرساله للكاشير والمدير لحظياً:',
+        '🛵 تم استقبال طلب دليفري وإرساله للكاشير:',
         normalizedOrder.customerName,
         '| الرقم:',
         orderId
       );
     } else {
       console.log(
-        '📥 تم استقبال طلب زبون وإرساله للكاشير والمدير لحظياً:',
+        '📥 تم استقبال طلب زبون وإرساله للكاشير:',
         orderId
       );
     }
@@ -1043,7 +1041,7 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 🔄 تحديث حالة الطلب العامة (مزامنة تامة لجميع الشاشات والسائقين) ==================== //
+  // ==================== 🔄 تحديث حالة الطلب العامة (تعديل دليفري لإزالة الطلب فوراً من عند باقي السائقين) ==================== //
 
   socket.on('update_order_status', (statusData) => {
 
@@ -1080,12 +1078,18 @@ io.on('connection', (socket) => {
       status: status
     };
 
-    // 🌟 التعديل الجوهري: بث التحديث فوراً لكافة الأجهزة (بحيث يختفي الطلب فوراً من قوائم باقي السائقين عند قبوله)
+    // 🌟 التعديل الأساسي هنا: إذا كانت الحالة قبول أو دليفري (أي لم تعد جاهزة معلقة للسائقين)، 
+    // نقوم بتحديث واجهات السائقين بقائمة الطلبات النشطة المصفاة أو بإرسال أمر الحذف اللحظي
     io.emit('order_status_updated', normalizedStatusData);
+    
+    // إرسال الطلبات النشطة المحدثة فوراً لكل الأجهزة ليختفي الطلب من شاشات باقي السائقين
+    const readyDeliveryOrders = serverActiveOrders.filter(
+      order => order.isDelivery === true && String(order.status || '').toLowerCase() === 'ready'
+    );
     io.emit('initial_orders', serverActiveOrders);
 
     console.log(
-      '🔄 تحديث حالة الطلب لحظياً:',
+      '🔄 تحديث حالة الطلب:',
       orderId,
       'إلى:',
       status
@@ -1139,8 +1143,6 @@ io.on('connection', (socket) => {
       orderId
     });
 
-    io.emit('initial_orders', serverActiveOrders);
-
     io.emit('kitchen_order_updated', {
       ...data,
       id: orderId,
@@ -1148,13 +1150,15 @@ io.on('connection', (socket) => {
       status: 'delivered'
     });
 
+    io.emit('initial_orders', serverActiveOrders);
+
     if (kitchenTimers[orderId]) {
       clearTimeout(kitchenTimers[orderId]);
       delete kitchenTimers[orderId];
     }
   });
 
-  // ==================== 👨‍🍳 إرسال طلب للمطبخ (مزامنة فورية) ==================== //
+  // ==================== 👨‍🍳 إرسال طلب للمطبخ ==================== //
 
   socket.on('send_to_kitchen', (orderData) => {
 
@@ -1201,11 +1205,9 @@ io.on('connection', (socket) => {
     }
 
     io.emit('new_kitchen_order', normalizedOrder);
-    io.emit('initial_kitchen_orders', kitchenOrders);
-    io.emit('initial_orders', serverActiveOrders);
 
     console.log(
-      `👨‍🍳 تم إرسال الطلب #${orderId} للمطبخ ومزامنته لحظياً`
+      `👨‍🍳 تم إرسال الطلب #${orderId} للمطبخ بعد موافقة الكاشير`
     );
 
     if (kitchenTimers[orderId]) {
@@ -1276,11 +1278,9 @@ io.on('connection', (socket) => {
     }
 
     io.emit('kitchen_order_updated', normalizedOrder);
-    io.emit('initial_kitchen_orders', kitchenOrders);
-    io.emit('initial_orders', serverActiveOrders);
 
     console.log(
-      '🔄 تحديث طلب المطبخ لحظياً:',
+      '🔄 تحديث طلب المطبخ:',
       orderId,
       'الحالة:',
       status
@@ -1333,10 +1333,9 @@ io.on('connection', (socket) => {
     }
 
     io.emit('admin_new_invoice_saved', invoiceData);
-    io.emit('initial_invoices', invoices);
 
     console.log(
-      '📄 تم حفظ الفاتورة للطلب ومزامنتها:',
+      '📄 تم حفظ الفاتورة للطلب:',
       orderId
     );
   });
@@ -1355,6 +1354,10 @@ io.on('connection', (socket) => {
 
     console.log(
       `📥 طلب بيانات الموظفين والسلف والإجازات من الجهاز: ${socket.id}`
+    );
+
+    console.log(
+      `👥 تم إرسال ${emps.length} موظف | 💸 ${advs.length} سلفة | 🌴 ${levs.length} إجازة`
     );
   });
 
@@ -1428,17 +1431,18 @@ io.on('connection', (socket) => {
     };
 
     io.emit('kitchen_order_updated', kitchenCancellationUpdate);
+
     io.emit('admin_order_cancelled', cancelData);
+
     io.emit('update_admin_invoices', {
       orderId: orderId,
       status: 'DELETED_AND_CANCELLED'
     });
+
     io.emit('order_cancelled_by_cashier', cancelData);
-    io.emit('initial_orders', serverActiveOrders);
-    io.emit('initial_kitchen_orders', kitchenOrders);
 
     console.log(
-      `🚨 تم إلغاء الطلب #${orderId} ومزامنته لحظياً عبر كافة الشاشات`
+      `🚨 تم إلغاء الطلب #${orderId}. السبب: ${cancelData.cancellationReason || 'بدون سبب'}`
     );
   });
 
@@ -1451,7 +1455,7 @@ io.on('connection', (socket) => {
     io.emit('order_cancelled_by_cashier', cancelData);
 
     console.log(
-      '🚨 تم إرسال إشعار إلغاء الطلب للزبون لحظياً'
+      '🚨 تم إرسال إشعار إلغاء الطلب للزبون'
     );
   });
 
@@ -1475,7 +1479,7 @@ io.on('connection', (socket) => {
     io.emit('admin_new_rating', ratingData);
 
     console.log(
-      '⭐ تم حفظ التقييم وإرساله للمدير لحظياً'
+      '⭐ تم حفظ التقييم وإرساله للمدير'
     );
   });
 
