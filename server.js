@@ -988,12 +988,13 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // تحديد أن هذا الطلب قادم من تطبيق الزبون الخاص
+    // التأكد من أن حالة الطلب الأولية ليست ready أبداً عند إنشائه من الكاشير أو الزبون
     const normalizedOrder = {
       ...orderData,
       id: orderId,
       orderId: orderId,
-      fromCustomerApp: true, // علامة واضحة تثبت أن الطلب من الزبون عبر التطبيق
+      status: orderData.status || 'new', // منع إرسال الطلب للسائق بالخطأ إذا كانت حالته غير محددة
+      fromCustomerApp: true, 
       fromCashier: false
     };
 
@@ -1010,7 +1011,7 @@ io.on('connection', (socket) => {
       };
     }
 
-    // 🛑 إرسال الطلب للكاشير فقط (لا يتم بثه لساشة الدليفري أبداً في هذه المرحلة)
+    // 🛑 إرسال الطلب للكاشير فقط (لا يتم بثه لشاشة الدليفري أبداً في هذه المرحلة)
     io.emit('new_order_to_cashier', normalizedOrder);
 
     if (normalizedOrder.isDelivery) {
