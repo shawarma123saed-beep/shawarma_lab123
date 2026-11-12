@@ -1041,6 +1041,24 @@ io.on('connection', (socket) => {
     );
   });
 
+  // ==================== 🛵 قبول طلب التوصيل من أحد السائقين وحذفه من عند البقية ==================== //
+  socket.on('driver_accept_order', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const orderId = normalizeOrderId(data.orderId ?? data.id);
+    if (!orderId) return;
+
+    // إزالة الطلب من الطلبات النشطة للسائقين المعلقين
+    serverActiveOrders = serverActiveOrders.filter(
+      (o) => getKitchenOrderId(o) !== orderId
+    );
+
+    // بث حدث الحذف لكل الأجهزة ليختفي الطلب فوراً من عند باقي السائقين
+    io.emit('driver_order_accepted', { orderId: orderId });
+    io.emit('initial_orders', serverActiveOrders);
+
+    console.log(`🛵 تم قبول طلب الدليفري #${orderId} بواسطة أحد السائقين وتم إزالته من شاشات باقي الزملاء.`);
+  });
+
   // ==================== 🔄 تحديث حالة الطلب العامة (تعديل دليفري لإزالة الطلب فوراً من عند باقي السائقين) ==================== //
 
   socket.on('update_order_status', (statusData) => {
@@ -1078,11 +1096,8 @@ io.on('connection', (socket) => {
       status: status
     };
 
-    // 🌟 التعديل الأساسي هنا: إذا كانت الحالة قبول أو دليفري (أي لم تعد جاهزة معلقة للسائقين)، 
-    // نقوم بتحديث واجهات السائقين بقائمة الطلبات النشطة المصفاة أو بإرسال أمر الحذف اللحظي
     io.emit('order_status_updated', normalizedStatusData);
     
-    // إرسال الطلبات النشطة المحدثة فوراً لكل الأجهزة ليختفي الطلب من شاشات باقي السائقين
     const readyDeliveryOrders = serverActiveOrders.filter(
       order => order.isDelivery === true && String(order.status || '').toLowerCase() === 'ready'
     );
