@@ -451,6 +451,7 @@ const notifyOrderReady = (orderData) => {
     status: 'ready'
   };
 
+  // 🛵 إرسال طلب الدليفري الجاهز حصرياً للسائقين عند إعلان المطبخ أنه جاهز
   if (readyPayload.isDelivery === true) {
     io.emit('driver_new_order', readyPayload);
     console.log(`🛵 تم إرسال طلب الدليفري الجاهز #${orderId} بكل تفاصيله لشاشة السائقين بنجاح`);
@@ -1009,6 +1010,7 @@ io.on('connection', (socket) => {
       };
     }
 
+    // 🛑 إرسال الطلب للكاشير فقط (لا يتم بثه لساشة الدليفري أبداً في هذه المرحلة)
     io.emit('new_order_to_cashier', normalizedOrder);
 
     if (normalizedOrder.isDelivery) {
@@ -1277,6 +1279,7 @@ io.on('connection', (socket) => {
       status
     );
 
+    // عندما يضغط المطبخ زر "الطلب جاهز" (ready)، يتم استدعاء دالة الإرسال للسائقين
     if (status === 'ready') {
       notifyOrderReady(normalizedOrder);
     }
