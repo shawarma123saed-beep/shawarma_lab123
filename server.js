@@ -24,7 +24,33 @@ app.get('/', (req, res) => {
 
 // ==================== 📁 مسارات حفظ البيانات ==================== //
 
-const dataDir = path.join(__dirname, 'data');
+// استخدم مسار الـ Railway Volume عند ضبط DATA_DIR، أو /data تلقائياً إذا كان موجوداً.
+const legacyDataDir = path.join(__dirname, 'data');
+const dataDir = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : (fs.existsSync('/data') ? '/data' : legacyDataDir);
+
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+// نقل بيانات الموظفين القديمة إلى الـ Volume مرة واحدة فقط، دون استبدال أي ملف موجود فيه.
+if (path.resolve(dataDir) !== path.resolve(legacyDataDir)) {
+  for (const fileName of ['employees.json', 'advances.json', 'leaves.json']) {
+    const oldFile = path.join(legacyDataDir, fileName);
+    const newFile = path.join(dataDir, fileName);
+    if (fs.existsSync(oldFile) && !fs.existsSync(newFile)) {
+      try {
+        fs.copyFileSync(oldFile, newFile, fs.constants.COPYFILE_EXCL);
+        console.log(`📦 تم نقل بيانات ${fileName} القديمة إلى مجلد التخزين الدائم`);
+      } catch (error) {
+        console.error(`⚠️ تعذر نقل ${fileName} إلى مجلد التخزين الدائم:`, error.message);
+      }
+    }
+  }
+}
+
+console.log('📁 مسار تخزين البيانات الفعلي:', dataDir);
 
 const menuFile = path.join(dataDir, 'menu.json');
 const invoicesFile = path.join(dataDir, 'invoices.json');
