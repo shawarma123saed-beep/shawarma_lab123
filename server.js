@@ -1041,22 +1041,19 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 🛵 قبول طلب التوصيل من أحد السائقين وحذفه من عند البقية ==================== //
+  // ==================== 🛵 قبول طلب التوصيل من أحد السائقين وإزالته من عند البقية فقط ==================== //
   socket.on('driver_accept_order', (data) => {
     if (!data || typeof data !== 'object') return;
     const orderId = normalizeOrderId(data.orderId ?? data.id);
     if (!orderId) return;
 
-    // إزالة الطلب من الطلبات النشطة للسائقين المعلقين
-    serverActiveOrders = serverActiveOrders.filter(
-      (o) => getKitchenOrderId(o) !== orderId
-    );
+    // بث حدث الحذف لباقي السائقين فقط (باستخدام socket.broadcast) ليبقى الطلب عند السائق الذي قبله
+    socket.broadcast.emit('driver_order_accepted', { 
+      orderId: orderId,
+      driverSocketId: data.driverSocketId || socket.id
+    });
 
-    // بث حدث الحذف لكل الأجهزة ليختفي الطلب فوراً من عند باقي السائقين
-    io.emit('driver_order_accepted', { orderId: orderId });
-    io.emit('initial_orders', serverActiveOrders);
-
-    console.log(`🛵 تم قبول طلب الدليفري #${orderId} بواسطة أحد السائقين وتم إزالته من شاشات باقي الزملاء.`);
+    console.log(`🛵 تم قبول طلب الدليفري #${orderId} بواسطة السائق وتم إزالته من شاشات باقي الزملاء فقط.`);
   });
 
   // ==================== 🔄 تحديث حالة الطلب العامة (تعديل دليفري لإزالة الطلب فوراً من عند باقي السائقين) ==================== //
