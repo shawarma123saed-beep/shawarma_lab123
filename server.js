@@ -597,7 +597,7 @@ app.get('/api/exchange-rate', (req, res) => {
   }
 });
 
-// ==================== REST API تحديث المنيو ==================== //
+// ==================== REST API تحديث المنيو (بدون فقدان الوجبات الجديدة) ==================== //
 
 app.post('/api/menu', (req, res) => {
   try {
@@ -605,7 +605,7 @@ app.post('/api/menu', (req, res) => {
     let currentMenu = getMenuData();
 
     if (Array.isArray(body)) {
-      currentMenu = body; // اعتماد الترتيب الكامل والأسعار الجديدة الواردة من المدير
+      currentMenu = body; 
     } else if (body && typeof body === 'object') {
       if (!body.id) {
         body.id = Date.now().toString();
@@ -708,7 +708,7 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 🍽️ المنيو ==================== //
+  // ==================== 🍽️ المنيو (تحديث آمن ودعم الوجبات الجديدة والأسعار) ==================== //
 
   socket.on('get_menu', () => {
     const menu = getMenuData();
@@ -749,27 +749,39 @@ io.on('connection', (socket) => {
   socket.on('admin_update_menu', (newMenuData) => {
     if (Array.isArray(newMenuData)) {
       saveAndBroadcastMenu(newMenuData);
-
     } else if (newMenuData && typeof newMenuData === 'object') {
       let currentMenu = getMenuData();
 
-      if (!newMenuData.id) {
-        newMenuData.id = Date.now().toString();
-      }
-
-      const index = currentMenu.findIndex(
-        (i) => i.id != null &&
-          i.id.toString() === newMenuData.id.toString()
-      );
-
-      if (index !== -1) {
-        currentMenu[index] = {
-          ...currentMenu[index],
-          ...newMenuData
-        };
+      // إذا كانت البيانات الواردة عبارة عن مصفوفة داخل كائن أو كائن وجبة مفرد
+      let itemsToProcess = [];
+      if (Array.isArray(newMenuData.menu)) {
+        itemsToProcess = newMenuData.menu;
+      } else if (Array.isArray(newMenuData.items)) {
+        itemsToProcess = newMenuData.items;
       } else {
-        currentMenu.push(newMenuData);
+        itemsToProcess = [newMenuData];
       }
+
+      itemsToProcess.forEach(itemData => {
+        if (!itemData) return;
+        if (!itemData.id) {
+          itemData.id = Date.now().toString() + Math.floor(Math.random() * 1000);
+        }
+
+        const index = currentMenu.findIndex(
+          (i) => i.id != null &&
+            i.id.toString() === itemData.id.toString()
+        );
+
+        if (index !== -1) {
+          currentMenu[index] = {
+            ...currentMenu[index],
+            ...itemData
+          };
+        } else {
+          currentMenu.push(itemData);
+        }
+      });
 
       saveAndBroadcastMenu(currentMenu);
     }
@@ -778,7 +790,11 @@ io.on('connection', (socket) => {
   socket.on('update_menu_item', (itemData) => {
     let currentMenu = getMenuData();
 
-    if (itemData && itemData.id) {
+    if (itemData) {
+      if (!itemData.id) {
+        itemData.id = Date.now().toString() + Math.floor(Math.random() * 1000);
+      }
+
       const index = currentMenu.findIndex(
         (i) => i.id != null &&
           i.id.toString() === itemData.id.toString()
