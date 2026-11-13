@@ -1056,6 +1056,20 @@ io.on('connection', (socket) => {
     console.log(`🛵 تم قبول طلب الدليفري #${orderId} بواسطة السائق وتم إزالته من شاشات باقي الزملاء فقط.`);
   });
 
+  // ==================== 🛵 إشعار تتبع الزبون المخصص عند قبول السائق للطلب ==================== //
+  socket.on('driver_accepted_order_notification', (data) => {
+    if (!data || typeof data !== 'object') return;
+    const orderId = normalizeOrderId(data.orderId ?? data.id);
+    if (!orderId) return;
+
+    io.emit('customer_order_on_the_way', {
+      orderId: orderId,
+      message: 'طلبكم في الطريق إليكم شاورما لاب لديكم لا خوف عليكم 🛵'
+    });
+
+    console.log(`🛵 تم إرسال إشعار تتبع الزبون للطلب #${orderId} بنجاح.`);
+  });
+
   // ==================== 🔄 تحديث حالة الطلب العامة ==================== //
 
   socket.on('update_order_status', (statusData) => {
