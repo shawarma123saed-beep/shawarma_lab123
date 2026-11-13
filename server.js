@@ -248,11 +248,40 @@ const writeJsonFile = (filePath, data) => {
 
 // ==================== 👥 معالجة قوائم الموظفين والسلف والإجازات ==================== //
 
+
 const normalizeListPayload = (payload, possibleKeys = []) => {
-  let target = payload;
-  if (Array.isArray(payload) && payload.length === 1 && (Array.isArray(payload[0]) || (payload[0] && typeof payload[0] === 'object'))) {
-    target = payload[0];
+  // القائمة المرسلة مباشرة تبقى قائمة حتى لو احتوت على عنصر واحد فقط.
+  if (Array.isArray(payload)) {
+    return payload;
   }
+
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('البيانات المرسلة ليست قائمة أو كائناً صالحاً');
+  }
+
+  // دعم أسماء المفاتيح المعروفة.
+  const supportedKeys = [
+    ...possibleKeys,
+    'data',
+    'list',
+    'items',
+    'payload',
+    'value'
+  ];
+
+  for (const key of supportedKeys) {
+    if (Array.isArray(payload[key])) {
+      return payload[key];
+    }
+  }
+
+  throw new Error(
+    `لم يتم العثور على قائمة بيانات داخل الإرسال. ` +
+    `نوع البيانات: ${typeof payload}، ` +
+    `المفاتيح المستلمة: ${Object.keys(payload).join(', ')}`
+  );
+};
+
 
   if (Array.isArray(target)) {
     return target;
@@ -277,7 +306,7 @@ const normalizeListPayload = (payload, possibleKeys = []) => {
   }
 
   throw new Error('لم يتم العثور على قائمة بيانات داخل الإرسال');
-};
+
 
 const validateDataList = (list, listName) => {
   if (!Array.isArray(list)) {
