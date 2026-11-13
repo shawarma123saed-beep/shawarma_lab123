@@ -249,8 +249,9 @@ const writeJsonFile = (filePath, data) => {
 // ==================== 👥 معالجة قوائم الموظفين والسلف والإجازات ==================== //
 
 
+
 const normalizeListPayload = (payload, possibleKeys = []) => {
-  // إذا وصلت القائمة مباشرة، لا نفك تغليفها حتى لو كان فيها موظف واحد.
+  // القائمة وصلت مباشرة
   if (Array.isArray(payload)) {
     return payload;
   }
@@ -268,10 +269,20 @@ const normalizeListPayload = (payload, possibleKeys = []) => {
     'value'
   ];
 
+  // القائمة داخل أحد المفاتيح المعروفة
   for (const key of supportedKeys) {
     if (Array.isArray(payload[key])) {
       return payload[key];
     }
+  }
+
+  // إذا كان الكائن نفسه موظفاً واحداً
+  if (
+    payload.id !== undefined &&
+    payload.id !== null &&
+    payload.name !== undefined
+  ) {
+    return [payload];
   }
 
   throw new Error(
