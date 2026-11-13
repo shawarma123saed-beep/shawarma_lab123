@@ -1047,7 +1047,7 @@ io.on('connection', (socket) => {
     const orderId = normalizeOrderId(data.orderId ?? data.id);
     if (!orderId) return;
 
-    // بث حدث الحذف لباقي السائقين فقط (باستخدام socket.broadcast) ليبقى الطلب عند السائق الذي قبله
+    // 🌟 استخدام broadcast لإرسال الحدث لباقي السائقين فقط واستثناء السائق الحالي
     socket.broadcast.emit('driver_order_accepted', { 
       orderId: orderId,
       driverSocketId: data.driverSocketId || socket.id
@@ -1056,7 +1056,7 @@ io.on('connection', (socket) => {
     console.log(`🛵 تم قبول طلب الدليفري #${orderId} بواسطة السائق وتم إزالته من شاشات باقي الزملاء فقط.`);
   });
 
-  // ==================== 🔄 تحديث حالة الطلب العامة (تعديل دليفري لإزالة الطلب فوراً من عند باقي السائقين) ==================== //
+  // ==================== 🔄 تحديث حالة الطلب العامة ==================== //
 
   socket.on('update_order_status', (statusData) => {
 
@@ -1095,10 +1095,7 @@ io.on('connection', (socket) => {
 
     io.emit('order_status_updated', normalizedStatusData);
     
-    const readyDeliveryOrders = serverActiveOrders.filter(
-      order => order.isDelivery === true && String(order.status || '').toLowerCase() === 'ready'
-    );
-    io.emit('initial_orders', serverActiveOrders);
+    // تم إزالة إعادة إرسال initial_orders بالكامل هنا لمنع تداخل شاشات السائقين
 
     console.log(
       '🔄 تحديث حالة الطلب:',
@@ -1161,8 +1158,6 @@ io.on('connection', (socket) => {
       orderId,
       status: 'delivered'
     });
-
-    io.emit('initial_orders', serverActiveOrders);
 
     if (kitchenTimers[orderId]) {
       clearTimeout(kitchenTimers[orderId]);
