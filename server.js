@@ -250,7 +250,7 @@ const writeJsonFile = (filePath, data) => {
 
 
 const normalizeListPayload = (payload, possibleKeys = []) => {
-  // القائمة المرسلة مباشرة تبقى قائمة حتى لو احتوت على عنصر واحد فقط.
+  // إذا وصلت القائمة مباشرة، لا نفك تغليفها حتى لو كان فيها موظف واحد.
   if (Array.isArray(payload)) {
     return payload;
   }
@@ -259,7 +259,6 @@ const normalizeListPayload = (payload, possibleKeys = []) => {
     throw new Error('البيانات المرسلة ليست قائمة أو كائناً صالحاً');
   }
 
-  // دعم أسماء المفاتيح المعروفة.
   const supportedKeys = [
     ...possibleKeys,
     'data',
@@ -277,35 +276,9 @@ const normalizeListPayload = (payload, possibleKeys = []) => {
 
   throw new Error(
     `لم يتم العثور على قائمة بيانات داخل الإرسال. ` +
-    `نوع البيانات: ${typeof payload}، ` +
     `المفاتيح المستلمة: ${Object.keys(payload).join(', ')}`
   );
 };
-
-
-  if (Array.isArray(target)) {
-    return target;
-  }
-
-  if (!target || typeof target !== 'object') {
-    throw new Error('البيانات المرسلة ليست قائمة أو كائناً صالحاً');
-  }
-
-  for (const key of possibleKeys) {
-    if (Array.isArray(target[key])) {
-      return target[key];
-    }
-  }
-
-  if (Array.isArray(target.data)) {
-    return target.data;
-  }
-
-  if (Array.isArray(target.list)) {
-    return target.list;
-  }
-
-  throw new Error('لم يتم العثور على قائمة بيانات داخل الإرسال');
 
 
 const validateDataList = (list, listName) => {
