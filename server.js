@@ -519,10 +519,11 @@ const saveAndBroadcastMenu = (newMenu) => {
     }
 
     console.log(
-      '💾 تم حفظ قائمة الطعام. العدد:',
+      '💾 تم حفظ قائمة الطعام والترتيب والأسعار بنجاح. العدد:',
       newMenu.length
     );
 
+    // 🚀 بث التحديث والترتيب والأسعار لكافة التطبيقات (كاشير، زبون خارجي، زبون داخلي، مطبخ)
     io.emit('admin_menu_updated', newMenu);
     io.emit('initial_menu_data', newMenu);
     io.emit('menu_data', newMenu);
@@ -604,7 +605,7 @@ app.post('/api/menu', (req, res) => {
     let currentMenu = getMenuData();
 
     if (Array.isArray(body)) {
-      currentMenu = body;
+      currentMenu = body; // اعتماد الترتيب الكامل والأسعار الجديدة الواردة من المدير
     } else if (body && typeof body === 'object') {
       if (!body.id) {
         body.id = Date.now().toString();
