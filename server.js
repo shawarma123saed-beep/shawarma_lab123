@@ -503,7 +503,7 @@ const notifyOrderReady = (orderData) => {
   return true;
 };
 
-// ==================== 🍽️ قائمة الطعام ==================== //
+// ==================== 🍽️ قائمة الطعام (تعديل جذري لضمان ثبات الترتيب والأسعار) ==================== //
 
 const getMenuData = () => readJsonFile(menuFile);
 
@@ -597,7 +597,7 @@ app.get('/api/exchange-rate', (req, res) => {
   }
 });
 
-// ==================== REST API تحديث المنيو (بدون فقدان الوجبات الجديدة) ==================== //
+// ==================== REST API تحديث المنيو (حفظ المصفوفة كاملة للترتيب) ==================== //
 
 app.post('/api/menu', (req, res) => {
   try {
@@ -605,7 +605,7 @@ app.post('/api/menu', (req, res) => {
     let currentMenu = getMenuData();
 
     if (Array.isArray(body)) {
-      currentMenu = body; 
+      currentMenu = body; // حفظ المصفوفة مباشرة لضمان ثبات الترتيب
     } else if (body && typeof body === 'object') {
       if (!body.id) {
         body.id = Date.now().toString();
@@ -708,7 +708,7 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 🍽️ المنيو (تحديث آمن ودعم الوجبات الجديدة والأسعار) ==================== //
+  // ==================== 🍽️ المنيو (تحديث آمن ودعم الترتيب والوجبات الجديدة والأسعار) ==================== //
 
   socket.on('get_menu', () => {
     const menu = getMenuData();
@@ -746,13 +746,13 @@ io.on('connection', (socket) => {
     console.log('🗑️ تم تفريغ الطلبات الملغاة بعد الطباعة');
   });
 
+  // 🌟 الحدث الرئيسي لحفظ الترتيب والوجبات والأسعار تماماً كما يرسلها المدير
   socket.on('admin_update_menu', (newMenuData) => {
     if (Array.isArray(newMenuData)) {
       saveAndBroadcastMenu(newMenuData);
     } else if (newMenuData && typeof newMenuData === 'object') {
       let currentMenu = getMenuData();
 
-      // إذا كانت البيانات الواردة عبارة عن مصفوفة داخل كائن أو كائن وجبة مفرد
       let itemsToProcess = [];
       if (Array.isArray(newMenuData.menu)) {
         itemsToProcess = newMenuData.menu;
@@ -1064,7 +1064,6 @@ io.on('connection', (socket) => {
     const orderId = normalizeOrderId(data.orderId ?? data.id);
     if (!orderId) return;
 
-    // 🌟 استخدام broadcast لإرسال الحدث لباقي السائقين فقط واستثناء السائق الحالي
     socket.broadcast.emit('driver_order_accepted', { 
       orderId: orderId,
       driverSocketId: data.driverSocketId || socket.id
@@ -1073,7 +1072,6 @@ io.on('connection', (socket) => {
     console.log(`🛵 تم قبول طلب الدليفري #${orderId} بواسطة السائق وتم إزالته من شاشات باقي الزملاء فقط.`);
   });
 
-  // ==================== 🛵 إشعار تتبع الزبون المخصص عند قبول السائق للطلب ==================== //
   socket.on('driver_accepted_order_notification', (data) => {
     if (!data || typeof data !== 'object') return;
     const orderId = normalizeOrderId(data.orderId ?? data.id);
@@ -1125,8 +1123,6 @@ io.on('connection', (socket) => {
     };
 
     io.emit('order_status_updated', normalizedStatusData);
-    
-    // تم إزالة إعادة إرسال initial_orders بالكامل هنا لمنع تداخل شاشات السائقين
 
     console.log(
       '🔄 تحديث حالة الطلب:',
