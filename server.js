@@ -509,13 +509,16 @@ const getMenuData = () => readJsonFile(menuFile);
 
 const saveAndBroadcastMenu = (newMenu) => {
   try {
-    if (!Array.isArray(newMenu)) return;
+    // المصفوفة الكاملة هي المصدر المعتمد؛ المصفوفة الفارغة تعني حذف جميع الأصناف.
+    if (!Array.isArray(newMenu)) {
+      console.error('❌ تم رفض تحديث المنيو: البيانات ليست مصفوفة');
+      return false;
+    }
 
     const saved = writeJsonFile(menuFile, newMenu);
-
     if (!saved) {
       console.error('❌ فشل حفظ قائمة الطعام');
-      return;
+      return false;
     }
 
     console.log(
@@ -523,13 +526,14 @@ const saveAndBroadcastMenu = (newMenu) => {
       newMenu.length
     );
 
-    // 🚀 بث التحديث والترتيب والأسعار لكافة التطبيقات (كاشير، زبون خارجي، زبون داخلي، مطبخ)
+    // المحافظة على أسماء الأحداث الحالية لتبقى كل التطبيقات المتصلة متوافقة.
     io.emit('admin_menu_updated', newMenu);
     io.emit('initial_menu_data', newMenu);
     io.emit('menu_data', newMenu);
-
+    return true;
   } catch (e) {
     console.error('خطأ في حفظ قائمة الطعام:', e);
+    return false;
   }
 };
 
@@ -605,36 +609,54 @@ app.post('/api/menu', (req, res) => {
     let currentMenu = getMenuData();
 
     if (Array.isArray(body)) {
-      currentMenu = body; // حفظ المصفوفة مباشرة لضمان ثبات الترتيب
+      // إرسال مصفوفة يعني استبدال القائمة بالكامل، بما فيها [] للحذف الكامل.
+      currentMenu = body;
     } else if (body && typeof body === 'object') {
-      if (!body.id) {
-        body.id = Date.now().toString();
-      }
+      // دعم نفس صيغة المصفوفة داخل غلاف menu/items.
+      const fullList = Array.isArray(body.menu)
+        ? body.menu
+        : (Array.isArray(body.items) ? body.items : null);
 
-      const index = currentMenu.findIndex(
-        (i) => i.id != null &&
-          i.id.toString() === body.id.toString()
-      );
-
-      if (index !== -1) {
-        currentMenu[index] = {
-          ...currentMenu[index],
-          ...body
-        };
+      if (fullList) {
+        currentMenu = fullList;
       } else {
-        currentMenu.push(body);
+        const item = { ...body };
+        if (!item.id) item.id = Date.now().toString();
+
+        const index = currentMenu.findIndex(
+          (i) => i && i.id != null &&
+            String(i.id) === String(item.id)
+        );
+
+        if (index !== -1) {
+          currentMenu[index] = { ...currentMenu[index], ...item };
+        } else {
+          currentMenu.push(item);
+        }
       }
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'صيغة بيانات المنيو غير صحيحة'
+      });
     }
 
-    saveAndBroadcastMenu(currentMenu);
+    const saved = saveAndBroadcastMenu(currentMenu);
+    if (!saved) {
+      return res.status(500).json({
+        success: false,
+        error: 'فشل حفظ قائمة الطعام'
+      });
+    }
 
-    res.json({
+    return res.json({
       success: true,
       menu: currentMenu
     });
-
   } catch (e) {
-    res.status(500).json({
+    console.error('❌ خطأ REST أثناء تحديث المنيو:', e);
+    return res.status(500).json({
+      success: false,
       error: 'فشل في تحديث قائمة الطعام'
     });
   }
@@ -747,69 +769,92 @@ io.on('connection', (socket) => {
   });
 
   // 🌟 الحدث الرئيسي لحفظ الترتيب والوجبات والأسعار تماماً كما يرسلها المدير
-  socket.on('admin_update_menu', (newMenuData) => {
-    if (Array.isArray(newMenuData)) {
-      saveAndBroadcastMenu(newMenuData);
-    } else if (newMenuData && typeof newMenuData === 'object') {
-      let currentMenu = getMenuData();
+  socket.on('admin_update_menu', (newMenuData, acknowledge) => {
+    try {
+      let saved = false;
 
-      let itemsToProcess = [];
-      if (Array.isArray(newMenuData.menu)) {
-        itemsToProcess = newMenuData.menu;
-      } else if (Array.isArray(newMenuData.items)) {
-        itemsToProcess = newMenuData.items;
-      } else {
-        itemsToProcess = [newMenuData];
-      }
-
-      itemsToProcess.forEach(itemData => {
-        if (!itemData) return;
+      if (Array.isArray(newMenuData)) {
+        // هذا هو المسار الأساسي من شاشة الإدارة: استبدال كامل يحفظ الإضافة والحذف والترتيب.
+        saved = saveAndBroadcastMenu(newMenuData);
+      } else if (
+        newMenuData &&
+        typeof newMenuData === 'object' &&
+        (Array.isArray(newMenuData.menu) || Array.isArray(newMenuData.items))
+      ) {
+        const fullList = Array.isArray(newMenuData.menu)
+          ? newMenuData.menu
+          : newMenuData.items;
+        saved = saveAndBroadcastMenu(fullList);
+      } else if (newMenuData && typeof newMenuData === 'object') {
+        // الحفاظ على التوافق مع التطبيقات القديمة التي ترسل صنفاً واحداً.
+        const currentMenu = getMenuData();
+        const itemData = { ...newMenuData };
         if (!itemData.id) {
           itemData.id = Date.now().toString() + Math.floor(Math.random() * 1000);
         }
 
         const index = currentMenu.findIndex(
-          (i) => i.id != null &&
-            i.id.toString() === itemData.id.toString()
+          (i) => i && i.id != null &&
+            String(i.id) === String(itemData.id)
         );
 
         if (index !== -1) {
-          currentMenu[index] = {
-            ...currentMenu[index],
-            ...itemData
-          };
+          currentMenu[index] = { ...currentMenu[index], ...itemData };
         } else {
           currentMenu.push(itemData);
         }
-      });
 
-      saveAndBroadcastMenu(currentMenu);
+        saved = saveAndBroadcastMenu(currentMenu);
+      }
+
+      if (typeof acknowledge === 'function') {
+        acknowledge({
+          success: saved,
+          menu: saved ? getMenuData() : undefined
+        });
+      }
+    } catch (e) {
+      console.error('❌ خطأ في حدث admin_update_menu:', e);
+      if (typeof acknowledge === 'function') {
+        acknowledge({ success: false, error: 'فشل تحديث المنيو' });
+      }
     }
   });
 
-  socket.on('update_menu_item', (itemData) => {
-    let currentMenu = getMenuData();
+  socket.on('update_menu_item', (itemData, acknowledge) => {
+    try {
+      if (!itemData || typeof itemData !== 'object') {
+        if (typeof acknowledge === 'function') {
+          acknowledge({ success: false, error: 'بيانات الصنف غير صحيحة' });
+        }
+        return;
+      }
 
-    if (itemData) {
-      if (!itemData.id) {
-        itemData.id = Date.now().toString() + Math.floor(Math.random() * 1000);
+      const currentMenu = getMenuData();
+      const item = { ...itemData };
+      if (!item.id) {
+        item.id = Date.now().toString() + Math.floor(Math.random() * 1000);
       }
 
       const index = currentMenu.findIndex(
-        (i) => i.id != null &&
-          i.id.toString() === itemData.id.toString()
+        (i) => i && i.id != null && String(i.id) === String(item.id)
       );
 
       if (index !== -1) {
-        currentMenu[index] = {
-          ...currentMenu[index],
-          ...itemData
-        };
+        currentMenu[index] = { ...currentMenu[index], ...item };
       } else {
-        currentMenu.push(itemData);
+        currentMenu.push(item);
       }
 
-      saveAndBroadcastMenu(currentMenu);
+      const saved = saveAndBroadcastMenu(currentMenu);
+      if (typeof acknowledge === 'function') {
+        acknowledge({ success: saved, menu: saved ? getMenuData() : undefined });
+      }
+    } catch (e) {
+      console.error('❌ خطأ في حدث update_menu_item:', e);
+      if (typeof acknowledge === 'function') {
+        acknowledge({ success: false, error: 'فشل تحديث الصنف' });
+      }
     }
   });
 
