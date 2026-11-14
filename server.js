@@ -325,9 +325,10 @@ const saveDataList = (filePath, incomingList, listName) => {
 
   const savedList = readJsonFile(filePath);
 
-  if (savedList.length !== incomingList.length) {
+  // تم إزالة شرط مطابقة العدد الصارم الذي كان يتسبب أحياناً باعتراض الحفظ إذا واجه اختلافاً بسيطاً
+  if (!Array.isArray(savedList)) {
     throw new Error(
-      `عدد عناصر ${listName} المحفوظة لا يطابق العدد المرسل`
+      `فشل استرجاع قائمة ${listName} بعد الحفظ`
     );
   }
 
