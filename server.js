@@ -874,13 +874,11 @@ io.on('connection', (socket) => {
       saveAndBroadcastMenu(currentMenu);
     }
   });
-
-  // ========================================================= //
+// ========================================================= //
   // ==================== 👥 الموظفون ======================== //
   // ========================================================= //
 
   socket.on('update_employees_list', (empDataList, callback) => {
-
     console.log('');
     console.log('📨 استقبل السيرفر طلب تحديث الموظفين');
     console.log('🔌 مصدر الإرسال:', socket.id);
@@ -891,9 +889,7 @@ io.on('connection', (socket) => {
         ['employees', 'employeeList', 'employeesList']
       );
 
-      console.log(
-        `👥 عدد الموظفين المستلمين: ${listToSave.length}`
-      );
+      console.log(`👥 عدد الموظفين المستلمين: ${listToSave.length}`);
 
       const savedEmployees = saveDataList(
         employeesFile,
@@ -901,15 +897,11 @@ io.on('connection', (socket) => {
         'الموظفين'
       );
 
-      console.log(
-        `✅ تم حفظ الموظفين بنجاح في: ${employeesFile}`
-      );
-
-      console.log(
-        `📊 العدد النهائي المحفوظ: ${savedEmployees.length}`
-      );
+      console.log(`✅ تم حفظ الموظفين بنجاح في: ${employeesFile}`);
+      console.log(`📊 العدد النهائي المحفوظ: ${savedEmployees.length}`);
 
       io.emit('employees_data_updated', savedEmployees);
+      io.emit('initial_employees_data', savedEmployees);
 
       if (typeof callback === 'function') {
         callback({
@@ -920,7 +912,6 @@ io.on('connection', (socket) => {
       }
 
     } catch (e) {
-
       console.error('❌ فشل حفظ الموظفين:', e.message);
 
       if (typeof callback === 'function') {
@@ -938,7 +929,6 @@ io.on('connection', (socket) => {
   // ========================================================= //
 
   socket.on('update_advances_list', (advDataList, callback) => {
-
     console.log('');
     console.log('📨 استقبل السيرفر طلب تحديث السلف والدفعات');
     console.log('🔌 مصدر الإرسال:', socket.id);
@@ -949,9 +939,7 @@ io.on('connection', (socket) => {
         ['advances', 'advanceList', 'advancesList']
       );
 
-      console.log(
-        `💸 عدد السلف والدفعات المستلمة: ${listToSave.length}`
-      );
+      console.log(`💸 عدد السلف والدفعات المستلمة: ${listToSave.length}`);
 
       const savedAdvances = saveDataList(
         advancesFile,
@@ -959,15 +947,11 @@ io.on('connection', (socket) => {
         'السلف والدفعات'
       );
 
-      console.log(
-        `✅ تم حفظ السلف والدفعات بنجاح في: ${advancesFile}`
-      );
-
-      console.log(
-        `📊 العدد النهائي المحفوظ: ${savedAdvances.length}`
-      );
+      console.log(`✅ تم حفظ السلف والدفعات بنجاح في: ${advancesFile}`);
+      console.log(`📊 العدد النهائي المحفوظ: ${savedAdvances.length}`);
 
       io.emit('advances_data_updated', savedAdvances);
+      io.emit('initial_advances_data', savedAdvances);
 
       if (typeof callback === 'function') {
         callback({
@@ -978,7 +962,6 @@ io.on('connection', (socket) => {
       }
 
     } catch (e) {
-
       console.error('❌ فشل حفظ السلف والدفعات:', e.message);
 
       if (typeof callback === 'function') {
@@ -996,7 +979,6 @@ io.on('connection', (socket) => {
   // ========================================================= //
 
   socket.on('update_leaves_list', (leavesDataList, callback) => {
-
     console.log('');
     console.log('📨 استقبل السيرفر طلب تحديث الإجازات');
     console.log('🔌 مصدر الإرسال:', socket.id);
@@ -1007,9 +989,7 @@ io.on('connection', (socket) => {
         ['leaves', 'leaveList', 'leavesList']
       );
 
-      console.log(
-        `🌴 عدد الإجازات المستلمة: ${listToSave.length}`
-      );
+      console.log(`🌴 عدد الإجازات المستلمة: ${listToSave.length}`);
 
       const savedLeaves = saveDataList(
         leavesFile,
@@ -1017,15 +997,11 @@ io.on('connection', (socket) => {
         'الإجازات'
       );
 
-      console.log(
-        `✅ تم حفظ الإجازات بنجاح في: ${leavesFile}`
-      );
-
-      console.log(
-        `📊 العدد النهائي المحفوظ: ${savedLeaves.length}`
-      );
+      console.log(`✅ تم حفظ الإجازات بنجاح في: ${leavesFile}`);
+      console.log(`📊 العدد النهائي المحفوظ: ${savedLeaves.length}`);
 
       io.emit('leaves_data_updated', savedLeaves);
+      io.emit('initial_leaves_data', savedLeaves);
 
       if (typeof callback === 'function') {
         callback({
@@ -1036,7 +1012,6 @@ io.on('connection', (socket) => {
       }
 
     } catch (e) {
-
       console.error('❌ فشل حفظ الإجازات:', e.message);
 
       if (typeof callback === 'function') {
