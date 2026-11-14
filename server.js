@@ -248,49 +248,41 @@ const writeJsonFile = (filePath, data) => {
 
 // ==================== 👥 معالجة قوائم الموظفين والسلف والإجازات ==================== //
 
-
-
 const normalizeListPayload = (payload, possibleKeys = []) => {
-  // القائمة وصلت مباشرة
-  if (Array.isArray(payload)) {
-    return payload;
+  let target = payload;
+  if (Array.isArray(payload) && payload.length === 1 && (Array.isArray(payload[0]) || (payload[0] && typeof payload[0] === 'object'))) {
+    target = payload[0];
   }
 
-  if (!payload || typeof payload !== 'object') {
+  if (Array.isArray(target)) {
+    return target;
+  }
+
+  if (!target || typeof target !== 'object') {
     throw new Error('البيانات المرسلة ليست قائمة أو كائناً صالحاً');
   }
 
-  const supportedKeys = [
-    ...possibleKeys,
-    'data',
-    'list',
-    'items',
-    'payload',
-    'value'
-  ];
-
-  // القائمة داخل أحد المفاتيح المعروفة
-  for (const key of supportedKeys) {
-    if (Array.isArray(payload[key])) {
-      return payload[key];
+  for (const key of possibleKeys) {
+    if (Array.isArray(target[key])) {
+      return target[key];
     }
   }
 
-  // إذا كان الكائن نفسه موظفاً واحداً
-  if (
-    payload.id !== undefined &&
-    payload.id !== null &&
-    payload.name !== undefined
-  ) {
-    return [payload];
+  if (Array.isArray(target.data)) {
+    return target.data;
   }
 
-  throw new Error(
-    `لم يتم العثور على قائمة بيانات داخل الإرسال. ` +
-    `المفاتيح المستلمة: ${Object.keys(payload).join(', ')}`
-  );
-};
+  if (Array.isArray(target.list)) {
+    return target.list;
+  }
 
+  // إذا كان الكائن نفسه عنصراً واحداً صالحاً
+  if (target.id !== undefined && target.id !== null) {
+    return [target];
+  }
+
+  throw new Error('لم يتم العثور على قائمة بيانات داخل الإرسال');
+};
 
 const validateDataList = (list, listName) => {
   if (!Array.isArray(list)) {
