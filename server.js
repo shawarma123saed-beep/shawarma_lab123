@@ -74,6 +74,7 @@ const leavesFile = path.join(dataDir, 'leaves.json'); // 🌟 ملف الإجا�
 const ratingsFile = path.join(dataDir, 'ratings.json');
 const reportsFile = path.join(dataDir, 'daily_reports.json');
 const kitchenOrdersFile = path.join(dataDir, 'kitchen_orders.json');
+const counterFile = path.join(dataDir, 'order_counter.json'); // 🔢 ملف عداد الفواتير التسلسلي
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -143,6 +144,25 @@ setInterval(fetchExchangeRateFromServer, 15 * 60 * 1000);
 let serverActiveOrders = [];
 let kitchenOrders = [];
 
+// ==================== 🔢 عداد الفواتير التسلسلي (1 إلى 300) ==================== //
+const getNextInvoiceNumber = () => {
+  let currentNumber = 0;
+  try {
+    if (fs.existsSync(counterFile)) {
+      const content = JSON.parse(fs.readFileSync(counterFile, 'utf8'));
+      currentNumber = parseInt(content.lastNumber, 10) || 0;
+    }
+  } catch (e) {
+    currentNumber = 0;
+  }
+
+  // إذا وصل 300 يعود إلى 1، وإلا يزيد 1
+  const nextNumber = (currentNumber >= 300) ? 1 : currentNumber + 1;
+
+  writeJsonFile(counterFile, { lastNumber: nextNumber });
+  return nextNumber;
+};
+
 // ==================== 🟢 منع تكرار إشعارات الجهوزية ==================== //
 
 const readyNotifiedOrders = new Set();
@@ -188,6 +208,11 @@ const initializeJsonFile = (filePath) => {
   reportsFile,
   kitchenOrdersFile
 ].forEach(initializeJsonFile);
+
+// تهيئة ملف العداد بشكل منفصل لأنه يخزن كائناً وليس مصفوفة
+if (!fs.existsSync(counterFile)) {
+  fs.writeFileSync(counterFile, JSON.stringify({ lastNumber: 0 }, null, 2), 'utf8');
+}
 
 // ==================== 📂 قراءة وكتابة JSON ==================== //
 
@@ -754,9 +779,7 @@ io.on('connection', (socket) => {
 
   socket.on('clear_server_active_orders', () => {
     serverActiveOrders = [];
-
     console.log('🧹 تم تفريغ طلبات الكاشير');
-
     io.emit('initial_orders', []);
   });
 
@@ -880,7 +903,8 @@ io.on('connection', (socket) => {
       saveAndBroadcastMenu(currentMenu);
     }
   });
-// ========================================================= //
+
+  // ========================================================= //
   // ==================== 👥 الموظفون ======================== //
   // ========================================================= //
 
@@ -1030,7 +1054,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== 📥 استقبال طلبات الزبائن ==================== //
+  // ==================== 📥 استقبال طلبات الزبائن (مع الترقيم 1-300) ==================== //
 
   socket.on('send_order', (orderData) => {
 
@@ -1048,10 +1072,15 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // توليد الرقم التسلسلي التلقائي من 1 إلى 300 لكل طلب جديد
+    const serialInvoiceNumber = orderData.invoiceNumber || orderData.orderNumber || getNextInvoiceNumber();
+
     const normalizedOrder = {
       ...orderData,
       id: orderId,
       orderId: orderId,
+      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي (1 إلى 300)
+      orderNumber: serialInvoiceNumber,
       status: orderData.status || 'new',
       fromCustomerApp: true, 
       fromCashier: false
@@ -1074,15 +1103,15 @@ io.on('connection', (socket) => {
 
     if (normalizedOrder.isDelivery) {
       console.log(
-        '🛵 تم استقبال طلب دليفري وإرساله للكاشير:',
-        normalizedOrder.customerName,
-        '| الرقم:',
-        orderId
+        '🛵 تم استقبال طلب دليفري برقم تسلسلي:',
+        serialInvoiceNumber,
+        '| العميل:',
+        normalizedOrder.customerName
       );
     } else {
       console.log(
-        '📥 تم استقبال طلب زبون وإرساله للكاشير:',
-        orderId
+        '📥 تم استقبال طلب زبون برقم تسلسلي:',
+        serialInvoiceNumber
       );
     }
   });
