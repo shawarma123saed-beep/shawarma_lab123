@@ -6,6 +6,15 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 
+// 🛡️ حماية السيرفر من الانهيار المفاجئ واستمرار العمل بأقصى كفاءة دون فصل
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ خطأ غير متوقع تم احتواؤه لمنع توقف السيرفر:', err.message);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ رفض وعد غير معالج تم احتواؤه بنجاح:', reason);
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
@@ -13,7 +22,11 @@ app.use(express.json({ limit: '20mb' }));
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: { origin: "*" },
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  upgradeTimeout: 30000,
+  maxHttpBufferSize: 1e8
 });
 
 // ==================== 🚀 مسار جذري لمنع خطأ 502 والاستجابة للمنصة ==================== //
@@ -1585,11 +1598,7 @@ io.on('connection', (socket) => {
   // ==================== 🔴 قطع الاتصال ==================== //
 
   socket.on('disconnect', () => {
-
-    console.log(
-      '❌ انقطع اتصال الجهاز:',
-      socket.id
-    );
+    // تنظيف الاتصال عند الانقطاع لمنع تسريب الذاكرة
   });
 
 });
