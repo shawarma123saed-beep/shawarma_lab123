@@ -1074,6 +1074,39 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
+
+  socket.on('update_order_broadcast', (updatedOrder) => {
+    if (!updatedOrder || typeof updatedOrder !== 'object') return;
+    const orderId = normalizeOrderId(updatedOrder.id ?? updatedOrder.orderId);
+    if (!orderId) return;
+
+    const index = serverActiveOrders.findIndex(o => getKitchenOrderId(o) === orderId);
+    if (index !== -1) {
+      serverActiveOrders[index] = {
+        ...serverActiveOrders[index],
+        ...updatedOrder,
+        id: orderId,
+        orderId: orderId
+      };
+    }
+
+    socket.broadcast.emit('order_updated_broadcast', updatedOrder);
+    console.log(`🔄 تم بث تعديل الطلب #${orderId} لكافة المتصفحات بنجاح.`);
+  });
+
+  socket.on('remove_order_broadcast', (data) => {
+    if (!data) return;
+    const orderId = normalizeOrderId(data.orderId ?? data.id);
+    if (!orderId) return;
+
+    serverActiveOrders = serverActiveOrders.filter(o => getKitchenOrderId(o) !== orderId);
+    removeKitchenOrder(orderId);
+
+    io.emit('order_removed_broadcast', { orderId: orderId });
+    console.log(`🗑️ تم بث إزالة الطلب #${orderId} لكافة المتصفحات والأجهزة المتصلة.`);
+  });
+
   // ==================== 🚀 تحويل الطلب للمدير ==================== //
 
   socket.on('cashier_forward_order', (orderData) => {
@@ -1504,6 +1537,8 @@ io.on('connection', (socket) => {
     });
 
     io.emit('order_cancelled_by_cashier', cancelData);
+
+    io.emit('order_removed_broadcast', { orderId: orderId });
 
     console.log(
       `🚨 تم إلغاء الطلب #${orderId}. السبب: ${cancelData.cancellationReason || 'بدون سبب'}`
