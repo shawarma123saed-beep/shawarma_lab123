@@ -1062,71 +1062,71 @@ io.on('connection', (socket) => {
 
   socket.on('send_order', (orderData, callback) => {
 
-    if (!orderData || typeof orderData !== 'object') {
+    if (!orderData || typeof orderData !== 'object' || Array.isArray(orderData)) {
       console.warn('⚠️ تم استقبال طلب غير صالح');
+      if (typeof callback === 'function') {
+        callback({ success: false, message: 'بيانات الطلب غير صالحة' });
+      }
       return;
     }
 
-    const orderId = normalizeOrderId(
-      orderData.id ?? orderData.orderId
-    );
+    // المعرّف الداخلي يبقى ثابتاً، ولا نستخدمه كرقم الفاتورة.
+    const orderId = normalizeOrderId(orderData.id ?? orderData.orderId);
 
     if (!orderId) {
       console.warn('⚠️ تم استقبال طلب دون رقم معرف');
+      if (typeof callback === 'function') {
+        callback({ success: false, message: 'الطلب لا يحتوي على معرف' });
+      }
       return;
     }
 
-    // توليد الرقم التسلسلي التلقائي من 1 إلى 300 لكل طلب جديد حصرياً عبر عداد السيرفر
-    const serialInvoiceNumber = getNextInvoiceNumber();
-
-    const normalizedOrder = {
-      ...orderData,
-      id: orderId,
-      orderId: orderId,
-      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي الحقيقي (1 إلى 300)
-      orderNumber: serialInvoiceNumber,
-      status: orderData.status || 'new',
-      fromCustomerApp: true, 
-      fromCashier: false
-    };
-
+    // افحص وجود الطلب أولاً قبل زيادة العداد حتى لا تُحجز أرقام عند إعادة الإرسال.
     const existingIndex = serverActiveOrders.findIndex(
       (o) => getKitchenOrderId(o) === orderId
     );
+    const existingOrder = existingIndex === -1
+      ? null
+      : serverActiveOrders[existingIndex];
+
+    const serialInvoiceNumber =
+      existingOrder?.invoiceNumber ??
+      existingOrder?.orderNumber ??
+      getNextInvoiceNumber();
+
+    const normalizedOrder = {
+      ...(existingOrder || {}),
+      ...orderData,
+      id: orderId,
+      orderId: orderId,
+      invoiceNumber: serialInvoiceNumber,
+      orderNumber: serialInvoiceNumber,
+      status: orderData.status || existingOrder?.status || 'new',
+      fromCustomerApp: orderData.fromCustomerApp !== false,
+      fromCashier: false
+    };
 
     if (existingIndex === -1) {
       serverActiveOrders.push(normalizedOrder);
     } else {
-      serverActiveOrders[existingIndex] = {
-        ...serverActiveOrders[existingIndex],
-        ...normalizedOrder
-      };
+      serverActiveOrders[existingIndex] = normalizedOrder;
     }
 
     io.emit('new_order_to_cashier', normalizedOrder);
 
-    // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة إلى هاتف الزبون عبر الـ Callback
     if (typeof callback === 'function') {
       callback({
         success: true,
         invoiceNumber: serialInvoiceNumber,
-        orderId: orderId
+        orderNumber: serialInvoiceNumber,
+        orderId: orderId,
+        id: orderId
       });
     }
 
-    if (normalizedOrder.isDelivery) {
-      console.log(
-        '🛵 تم استقبال طلب دليفري برقم تسلسلي:',
-        serialInvoiceNumber,
-        '| العميل:',
-        normalizedOrder.customerName
-      );
-    } else {
-      console.log(
-        '📥 تم استقبال طلب زبون برقم تسلسلي:',
-        serialInvoiceNumber
-      );
-    }
+    console.log(
+      `📥 ${existingOrder ? 'إعادة إرسال' : 'استقبال'} الطلب الداخلي #${orderId} | الفاتورة #${serialInvoiceNumber}`
+    );
   });
 
   // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
@@ -1328,22 +1328,34 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const normalizedOrder = {
-      ...orderData,
-      id: orderId,
-      orderId: orderId,
-      fromCustomerApp: orderData.fromCustomerApp === true,
-    };
-
     const activeIndex = serverActiveOrders.findIndex(
       (order) => getKitchenOrderId(order) === orderId
     );
+    const activeOrder = activeIndex === -1
+      ? null
+      : serverActiveOrders[activeIndex];
+
+    // احتفظ برقم الفاتورة الذي خصصه السيرفر حتى لو لم ترسله شاشة المطبخ.
+    const normalizedOrder = {
+      ...(activeOrder || {}),
+      ...orderData,
+      id: orderId,
+      orderId: orderId,
+      invoiceNumber:
+        orderData.invoiceNumber ??
+        orderData.orderNumber ??
+        activeOrder?.invoiceNumber ??
+        activeOrder?.orderNumber,
+      orderNumber:
+        orderData.orderNumber ??
+        orderData.invoiceNumber ??
+        activeOrder?.orderNumber ??
+        activeOrder?.invoiceNumber,
+      fromCustomerApp: orderData.fromCustomerApp === true,
+    };
 
     if (activeIndex !== -1) {
-      serverActiveOrders[activeIndex] = {
-        ...serverActiveOrders[activeIndex],
-        ...normalizedOrder
-      };
+      serverActiveOrders[activeIndex] = normalizedOrder;
     } else {
       serverActiveOrders.push(normalizedOrder);
     }
