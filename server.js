@@ -1532,7 +1532,7 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 📊 التقرير اليومي ==================== //
+  // ==================== 📊 التقرير اليومي وإغلاق الصندوق ==================== //
 
   socket.on('close_register_and_send_report', (reportData) => {
 
@@ -1549,10 +1549,17 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // 🧹 تفريغ الذاكرة بالكامل عند إغلاق الصندوق نهاية اليوم فقط لضمان عدم تراكم الـ RAM
+    serverActiveOrders = [];
+    kitchenOrders = [];
+    saveKitchenOrders();
+
+    io.emit('initial_orders', []);
+    io.emit('initial_kitchen_orders', []);
     io.emit('admin_daily_report_received', reportData);
 
     console.log(
-      '📊 تم حفظ التقرير المالي اليومي'
+      '📊 تم حفظ التقرير المالي اليومي وتفريغ الذاكرة والطلبات لبداية يوم جديد بنجاح 🚀'
     );
   });
 
