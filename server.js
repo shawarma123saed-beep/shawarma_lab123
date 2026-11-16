@@ -89,7 +89,7 @@ const fetchExchangeRateFromServer = () => {
   https.get('https://liranews.info/api/public/v1/price/usdsypd', {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json'
+      'Accept': 'application/json, text/plain, */*'
     }
   }, (res) => {
     let data = '';
@@ -100,8 +100,8 @@ const fetchExchangeRateFromServer = () => {
 
     res.on('end', () => {
       try {
-        if (data.trim().startsWith('<')) {
-          console.error('⚠️ الرابط أرجع HTML بدلاً من JSON');
+        if (data.trim().startsWith('<') || res.statusCode !== 200) {
+          console.error('⚠️ الرابط أرجع HTML أو خطأ');
           return;
         }
 
@@ -109,7 +109,11 @@ const fetchExchangeRateFromServer = () => {
 
         const liveRate = parseFloat(
           parsedData?.usdsypd?.sell ||
-          parsedData?.usdsypd?.value
+          parsedData?.usdsypd?.value ||
+          parsedData?.sell ||
+          parsedData?.value ||
+          parsedData?.price ||
+          parsedData?.data?.sell
         );
 
         if (!isNaN(liveRate) && liveRate > 0) {
@@ -1633,10 +1637,10 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 🔴 قطع الاتصال ==================== //
+  // ==================== 🔴 قطع الاتصال وحماية الذاكرة من الكيلد ==================== //
 
   socket.on('disconnect', () => {
-    // تنظيف الاتصال عند الانقطاع لمنع تسريب الذاكرة
+    socket.removeAllListeners();
   });
 
 });
