@@ -1054,9 +1054,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== 📥 استقبال طلبات الزبائن (مع الترقيم 1-300) ==================== //
+  // ==================== 📥 استقبال طلبات الزبائن (مع الترقيم 1-300 والرد الفوري للزبون) ==================== //
 
-  socket.on('send_order', (orderData) => {
+  socket.on('send_order', (orderData, callback) => {
 
     if (!orderData || typeof orderData !== 'object') {
       console.warn('⚠️ تم استقبال طلب غير صالح');
@@ -1072,14 +1072,14 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // توليد الرقم التسلسلي التلقائي من 1 إلى 300 لكل طلب جديد
-    const serialInvoiceNumber = orderData.invoiceNumber || orderData.orderNumber || getNextInvoiceNumber();
+    // توليد الرقم التسلسلي التلقائي من 1 إلى 300 لكل طلب جديد حصرياً عبر عداد السيرفر
+    const serialInvoiceNumber = getNextInvoiceNumber();
 
     const normalizedOrder = {
       ...orderData,
       id: orderId,
       orderId: orderId,
-      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي (1 إلى 300)
+      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي الحقيقي (1 إلى 300)
       orderNumber: serialInvoiceNumber,
       status: orderData.status || 'new',
       fromCustomerApp: true, 
@@ -1100,6 +1100,15 @@ io.on('connection', (socket) => {
     }
 
     io.emit('new_order_to_cashier', normalizedOrder);
+
+    // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة إلى هاتف الزبون عبر الـ Callback
+    if (typeof callback === 'function') {
+      callback({
+        success: true,
+        invoiceNumber: serialInvoiceNumber,
+        orderId: orderId
+      });
+    }
 
     if (normalizedOrder.isDelivery) {
       console.log(
