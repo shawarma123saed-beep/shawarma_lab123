@@ -1132,13 +1132,15 @@ io.on('connection', (socket) => {
       };
     }
 
-    io.emit('new_order_to_cashier', normalizedOrder);
+    // 🛑 التعديل الجذري لمنع تجمد الكاشير: بث الطلب لباقي الأجهزة فقط وعدم إرساله للكاشير المرسل نفسه
+    socket.broadcast.emit('new_order_to_cashier', normalizedOrder);
 
     // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة عبر الـ Callback
     if (typeof callback === 'function') {
       callback({
         success: true,
         invoiceNumber: serialInvoiceNumber,
+        orderNumber: serialInvoiceNumber,
         orderId: orderId
       });
     }
