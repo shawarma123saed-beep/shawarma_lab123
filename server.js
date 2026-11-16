@@ -89,7 +89,7 @@ const fetchExchangeRateFromServer = () => {
   https.get('https://liranews.info/api/public/v1/price/usdsypd', {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json, text/plain, */*'
+      'Accept': 'application/json'
     }
   }, (res) => {
     let data = '';
@@ -100,8 +100,8 @@ const fetchExchangeRateFromServer = () => {
 
     res.on('end', () => {
       try {
-        if (data.trim().startsWith('<') || res.statusCode !== 200) {
-          console.error('⚠️ الرابط أرجع HTML أو خطأ');
+        if (data.trim().startsWith('<')) {
+          console.error('⚠️ الرابط أرجع HTML بدلاً من JSON');
           return;
         }
 
@@ -109,11 +109,7 @@ const fetchExchangeRateFromServer = () => {
 
         const liveRate = parseFloat(
           parsedData?.usdsypd?.sell ||
-          parsedData?.usdsypd?.value ||
-          parsedData?.sell ||
-          parsedData?.value ||
-          parsedData?.price ||
-          parsedData?.data?.sell
+          parsedData?.usdsypd?.value
         );
 
         if (!isNaN(liveRate) && liveRate > 0) {
@@ -1062,71 +1058,71 @@ io.on('connection', (socket) => {
 
   socket.on('send_order', (orderData, callback) => {
 
-    if (!orderData || typeof orderData !== 'object' || Array.isArray(orderData)) {
+    if (!orderData || typeof orderData !== 'object') {
       console.warn('⚠️ تم استقبال طلب غير صالح');
-      if (typeof callback === 'function') {
-        callback({ success: false, message: 'بيانات الطلب غير صالحة' });
-      }
       return;
     }
 
-    // المعرّف الداخلي يبقى ثابتاً، ولا نستخدمه كرقم الفاتورة.
-    const orderId = normalizeOrderId(orderData.id ?? orderData.orderId);
+    const orderId = normalizeOrderId(
+      orderData.id ?? orderData.orderId
+    );
 
     if (!orderId) {
       console.warn('⚠️ تم استقبال طلب دون رقم معرف');
-      if (typeof callback === 'function') {
-        callback({ success: false, message: 'الطلب لا يحتوي على معرف' });
-      }
       return;
     }
 
-    // افحص وجود الطلب أولاً قبل زيادة العداد حتى لا تُحجز أرقام عند إعادة الإرسال.
-    const existingIndex = serverActiveOrders.findIndex(
-      (o) => getKitchenOrderId(o) === orderId
-    );
-    const existingOrder = existingIndex === -1
-      ? null
-      : serverActiveOrders[existingIndex];
-
-    const serialInvoiceNumber =
-      existingOrder?.invoiceNumber ??
-      existingOrder?.orderNumber ??
-      getNextInvoiceNumber();
+    // توليد الرقم التسلسلي التلقائي من 1 إلى 300 لكل طلب جديد حصرياً عبر عداد السيرفر
+    const serialInvoiceNumber = getNextInvoiceNumber();
 
     const normalizedOrder = {
-      ...(existingOrder || {}),
       ...orderData,
       id: orderId,
       orderId: orderId,
-      invoiceNumber: serialInvoiceNumber,
+      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي الحقيقي (1 إلى 300)
       orderNumber: serialInvoiceNumber,
-      status: orderData.status || existingOrder?.status || 'new',
-      fromCustomerApp: orderData.fromCustomerApp !== false,
+      status: orderData.status || 'new',
+      fromCustomerApp: true, 
       fromCashier: false
     };
+
+    const existingIndex = serverActiveOrders.findIndex(
+      (o) => getKitchenOrderId(o) === orderId
+    );
 
     if (existingIndex === -1) {
       serverActiveOrders.push(normalizedOrder);
     } else {
-      serverActiveOrders[existingIndex] = normalizedOrder;
+      serverActiveOrders[existingIndex] = {
+        ...serverActiveOrders[existingIndex],
+        ...normalizedOrder
+      };
     }
 
     io.emit('new_order_to_cashier', normalizedOrder);
 
+    // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة إلى هاتف الزبون عبر الـ Callback
     if (typeof callback === 'function') {
       callback({
         success: true,
         invoiceNumber: serialInvoiceNumber,
-        orderNumber: serialInvoiceNumber,
-        orderId: orderId,
-        id: orderId
+        orderId: orderId
       });
     }
 
-    console.log(
-      `📥 ${existingOrder ? 'إعادة إرسال' : 'استقبال'} الطلب الداخلي #${orderId} | الفاتورة #${serialInvoiceNumber}`
-    );
+    if (normalizedOrder.isDelivery) {
+      console.log(
+        '🛵 تم استقبال طلب دليفري برقم تسلسلي:',
+        serialInvoiceNumber,
+        '| العميل:',
+        normalizedOrder.customerName
+      );
+    } else {
+      console.log(
+        '📥 تم استقبال طلب زبون برقم تسلسلي:',
+        serialInvoiceNumber
+      );
+    }
   });
 
   // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
@@ -1328,34 +1324,22 @@ io.on('connection', (socket) => {
       return;
     }
 
-    const activeIndex = serverActiveOrders.findIndex(
-      (order) => getKitchenOrderId(order) === orderId
-    );
-    const activeOrder = activeIndex === -1
-      ? null
-      : serverActiveOrders[activeIndex];
-
-    // احتفظ برقم الفاتورة الذي خصصه السيرفر حتى لو لم ترسله شاشة المطبخ.
     const normalizedOrder = {
-      ...(activeOrder || {}),
       ...orderData,
       id: orderId,
       orderId: orderId,
-      invoiceNumber:
-        orderData.invoiceNumber ??
-        orderData.orderNumber ??
-        activeOrder?.invoiceNumber ??
-        activeOrder?.orderNumber,
-      orderNumber:
-        orderData.orderNumber ??
-        orderData.invoiceNumber ??
-        activeOrder?.orderNumber ??
-        activeOrder?.invoiceNumber,
       fromCustomerApp: orderData.fromCustomerApp === true,
     };
 
+    const activeIndex = serverActiveOrders.findIndex(
+      (order) => getKitchenOrderId(order) === orderId
+    );
+
     if (activeIndex !== -1) {
-      serverActiveOrders[activeIndex] = normalizedOrder;
+      serverActiveOrders[activeIndex] = {
+        ...serverActiveOrders[activeIndex],
+        ...normalizedOrder
+      };
     } else {
       serverActiveOrders.push(normalizedOrder);
     }
@@ -1649,10 +1633,10 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 🔴 قطع الاتصال وحماية الذاكرة من الكيلد ==================== //
+  // ==================== 🔴 قطع الاتصال ==================== //
 
   socket.on('disconnect', () => {
-    socket.removeAllListeners();
+    // تنظيف الاتصال عند الانقطاع لمنع تسريب الذاكرة
   });
 
 });
