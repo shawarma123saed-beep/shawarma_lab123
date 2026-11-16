@@ -148,23 +148,44 @@ setInterval(fetchExchangeRateFromServer, 15 * 60 * 1000);
 let serverActiveOrders = [];
 let kitchenOrders = [];
 
-// ==================== 🔢 عداد الفواتير التسلسلي (1 إلى 300) ==================== //
-const getNextInvoiceNumber = () => {
-  let currentNumber = 0;
+// ==================== 🔢 نظام العدادات النطاقية المنفصلة ==================== //
+const getNextRangeInvoiceNumber = (orderType) => {
+  let counterData = { customerLast: 0, cashierLast: 2000, deliveryLast: 4000 };
+  
   try {
     if (fs.existsSync(counterFile)) {
       const content = JSON.parse(fs.readFileSync(counterFile, 'utf8'));
-      currentNumber = parseInt(content.lastNumber, 10) || 0;
+      counterData.customerLast = parseInt(content.customerLast, 10) || 0;
+      counterData.cashierLast = parseInt(content.cashierLast, 10) || 2000;
+      counterData.deliveryLast = parseInt(content.deliveryLast, 10) || 4000;
     }
   } catch (e) {
-    currentNumber = 0;
+    // القيم الافتراضية عند الخطأ
   }
 
-  // إذا وصل 300 يعود إلى 1، وإلا يزيد 1
-  const nextNumber = (currentNumber >= 300) ? 1 : currentNumber + 1;
+  let assignedNumber = 1;
 
-  writeJsonFile(counterFile, { lastNumber: nextNumber });
-  return nextNumber;
+  if (orderType === 'customer') {
+    // 📱 تطبيق الزبون الداخلي: من 1 إلى 2000 (يعود إلى 1 عند التجاوز)
+    counterData.customerLast++;
+    if (counterData.customerLast > 2000) counterData.customerLast = 1; 
+    assignedNumber = counterData.customerLast;
+  } 
+  else if (orderType === 'cashier') {
+    // 🖨️ الكاشير والطلب المباشر: من 2001 إلى 4000 (يعود إلى 2001 عند التجاوز)
+    counterData.cashierLast++;
+    if (counterData.cashierLast > 4000) counterData.cashierLast = 2001; 
+    assignedNumber = counterData.cashierLast;
+  } 
+  else if (orderType === 'delivery') {
+    // 🛵 الدليفري: من 4001 إلى 6000 (يعود إلى 4001 عند التجاوز)
+    counterData.deliveryLast++;
+    if (counterData.deliveryLast > 6000) counterData.deliveryLast = 4001; 
+    assignedNumber = counterData.deliveryLast;
+  }
+
+  writeJsonFile(counterFile, counterData);
+  return assignedNumber;
 };
 
 // ==================== 🟢 منع تكرار إشعارات الجهوزية ==================== //
@@ -213,9 +234,9 @@ const initializeJsonFile = (filePath) => {
   kitchenOrdersFile
 ].forEach(initializeJsonFile);
 
-// تهيئة ملف العداد بشكل منفصل لأنه يخزن كائناً وليس مصفوفة
+// تهيئة ملف العداد بالنطاقات المخصصة في حال لم يكن موجوداً
 if (!fs.existsSync(counterFile)) {
-  fs.writeFileSync(counterFile, JSON.stringify({ lastNumber: 0 }, null, 2), 'utf8');
+  fs.writeFileSync(counterFile, JSON.stringify({ customerLast: 0, cashierLast: 2000, deliveryLast: 4000 }, null, 2), 'utf8');
 }
 
 // ==================== 📂 قراءة وكتابة JSON ==================== //
@@ -1058,7 +1079,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== 📥 استقبال طلبات الزبائن (مع الترقيم 1-300 والرد الفوري للزبون) ==================== //
+  // ==================== 📥 استقبال طلبات الزبائن (مع الترقيم النطاقي الدقيق والرد الفوري) ==================== //
 
   socket.on('send_order', (orderData, callback) => {
 
@@ -1076,18 +1097,26 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // توليد الرقم التسلسلي التلقائي من 1 إلى 300 لكل طلب جديد حصرياً عبر عداد السيرفر
-    const serialInvoiceNumber = getNextInvoiceNumber();
+    // تحديد نوع النطاق بناءً على مصدر الطلب أو خصائصه
+    let source = orderData.orderSource || 'cashier';
+    if (orderData.isDelivery === true) {
+      source = 'delivery';
+    } else if (orderData.fromCustomerApp === true) {
+      source = 'customer';
+    }
+
+    // توليد الرقم التسلسلي التلقائي بناءً على النطاق المخصص
+    const serialInvoiceNumber = getNextRangeInvoiceNumber(source);
 
     const normalizedOrder = {
       ...orderData,
       id: orderId,
       orderId: orderId,
-      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي الحقيقي (1 إلى 300)
+      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي ضمن النطاق الصحيح
       orderNumber: serialInvoiceNumber,
       status: orderData.status || 'new',
-      fromCustomerApp: true, 
-      fromCashier: false
+      fromCustomerApp: source === 'customer', 
+      fromCashier: source === 'cashier'
     };
 
     const existingIndex = serverActiveOrders.findIndex(
@@ -1105,7 +1134,7 @@ io.on('connection', (socket) => {
 
     io.emit('new_order_to_cashier', normalizedOrder);
 
-    // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة إلى هاتف الزبون عبر الـ Callback
+    // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة عبر الـ Callback
     if (typeof callback === 'function') {
       callback({
         success: true,
@@ -1114,19 +1143,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    if (normalizedOrder.isDelivery) {
-      console.log(
-        '🛵 تم استقبال طلب دليفري برقم تسلسلي:',
-        serialInvoiceNumber,
-        '| العميل:',
-        normalizedOrder.customerName
-      );
-    } else {
-      console.log(
-        '📥 تم استقبال طلب زبون برقم تسلسلي:',
-        serialInvoiceNumber
-      );
-    }
+    console.log(`📥 [${source.toUpperCase()}] تم استقبال الطلب برقم تسلسلي ضمن النطاق:`, serialInvoiceNumber);
   });
 
   // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
