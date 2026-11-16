@@ -200,6 +200,47 @@ const normalizeOrderId = (id) => {
   return String(id);
 };
 
+// ==================== 📦 أرشفة وتفريغ الطلبات المنتهية عند بلوغ 20 طلباً ==================== //
+const checkAndArchiveCompletedOrders = () => {
+  // فحص الطلبات التي انتهت كلياً وتم إنجازها/تسليمها
+  const finishedOrders = serverActiveOrders.filter(o => {
+    const status = String(o.status || '').toLowerCase();
+    return ['delivered', 'completed', 'paid', 'ready'].includes(status);
+  });
+
+  // إذا وصل عدد الطلبات المنتهية إلى 20 أو أكثر
+  if (finishedOrders.length >= 20) {
+    let invoices = readJsonFile(invoicesFile);
+
+    finishedOrders.forEach(order => {
+      const orderId = normalizeOrderId(order.id ?? order.orderId);
+      if (!orderId) return;
+
+      const exists = invoices.some(inv => normalizeOrderId(inv.orderId || inv.id) === orderId);
+      if (!exists) {
+        invoices.push({
+          ...order,
+          archivedAt: new Date().toISOString(),
+          archiveReason: 'Batch archive of 20 finished orders'
+        });
+      }
+    });
+
+    // حفظ الفواتير المؤرشفة نهائياً لدى المدير
+    writeJsonFile(invoicesFile, invoices);
+
+    // استخراج معرّفات الطلبات المؤرشفة لإزالتها من شاشة الكاشير والذاكرة الحية
+    const finishedIds = new Set(finishedOrders.map(o => normalizeOrderId(o.id ?? o.orderId)));
+    serverActiveOrders = serverActiveOrders.filter(o => !finishedIds.has(normalizeOrderId(o.id ?? o.orderId)));
+
+    // تحديث الشاشات
+    io.emit('initial_orders', serverActiveOrders);
+    io.emit('update_admin_invoices', invoices);
+
+    console.log(`📦 تم أرشفة ${finishedOrders.length} طلب منتهٍ بنجاح لدى المدير وحذفهم من شاشة الكاشير لتفريغ الذاكرة.`);
+  }
+};
+
 // ==================== 🟢 تهيئة الملفات (مع الحفاظ على البيانات الموجودة وعدم تصفيرها) ==================== //
 
 const initializeJsonFile = (filePath) => {
@@ -1287,6 +1328,9 @@ io.on('connection', (socket) => {
         );
       }
     }
+
+    // 🔍 فحص هل وصل عدد الطلبات المنتهية إلى 20 لأرشفتها وتفريغ شاشة الكاشير
+    checkAndArchiveCompletedOrders();
   });
 
   // ==================== 🛵 تسليم طلب الدليفري ==================== //
@@ -1327,6 +1371,9 @@ io.on('connection', (socket) => {
       clearTimeout(kitchenTimers[orderId]);
       delete kitchenTimers[orderId];
     }
+
+    // 🔍 فحص الأرشفة عند تسليم الدليفري
+    checkAndArchiveCompletedOrders();
   });
 
   // ==================== 👨‍🍳 إرسال طلب للمطبخ ==================== //
@@ -1473,6 +1520,9 @@ io.on('connection', (socket) => {
         );
       }
     }
+
+    // 🔍 فحص الأرشفة عند تحديث حالة المطبخ
+    checkAndArchiveCompletedOrders();
   });
 
   // ==================== 📄 حفظ الفواتير ==================== //
