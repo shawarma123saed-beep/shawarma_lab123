@@ -1532,7 +1532,7 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 📊 التقرير اليومي وإغلاق الصندوق ==================== //
+  // ==================== 📊 التقرير اليومي وإغلاق الصندوق (مع التطهير الجذري للذاكرة) ==================== //
 
   socket.on('close_register_and_send_report', (reportData) => {
 
@@ -1549,11 +1549,12 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 🧹 تفريغ الذاكرة بالكامل عند إغلاق الصندوق نهاية اليوم فقط لضمان عدم تراكم الـ RAM
+    // 🧹 التطهير الجذري الكامل للذاكرة الحية (RAM) عند إغلاق الصندوق نهاية اليوم المالي حصراً
     serverActiveOrders = [];
     kitchenOrders = [];
-    saveKitchenOrders();
+    saveKitchenOrders(); // تحديث ملف المطبخ ليفرغ تماماً
 
+    // إبقاء إشعار تفريغ الشاشات لكافة الأجهزة لبداية يوم جديد نظيف
     io.emit('initial_orders', []);
     io.emit('initial_kitchen_orders', []);
     io.emit('admin_daily_report_received', reportData);
