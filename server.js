@@ -1146,8 +1146,10 @@ io.on('connection', (socket) => {
       source = 'customer';
     }
 
-    // توليد الرقم التسلسلي التلقائي بناءً على النطاق المخصص
-    const serialInvoiceNumber = getNextRangeInvoiceNumber(source);
+    // استخدام رقم الفاتورة القادم محلياً من الجهاز إن وُجد، وإلا التوليد التلقائي كخيار احتياطي
+    const incomingInvoiceNumber = orderData.invoiceNumber ?? orderData.orderNumber;
+    const hasLocalNumber = incomingInvoiceNumber !== undefined && incomingInvoiceNumber !== null && String(incomingInvoiceNumber).trim() !== '';
+    const serialInvoiceNumber = hasLocalNumber ? incomingInvoiceNumber : getNextRangeInvoiceNumber(source);
 
     const normalizedOrder = {
       ...orderData,
