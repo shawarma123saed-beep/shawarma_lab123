@@ -74,7 +74,6 @@ const leavesFile = path.join(dataDir, 'leaves.json'); // 🌟 ملف الإجا�
 const ratingsFile = path.join(dataDir, 'ratings.json');
 const reportsFile = path.join(dataDir, 'daily_reports.json');
 const kitchenOrdersFile = path.join(dataDir, 'kitchen_orders.json');
-const counterFile = path.join(dataDir, 'order_counter.json'); // 🔢 ملف عداد الفواتير التسلسلي
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -83,7 +82,7 @@ if (!fs.existsSync(dataDir)) {
 
 // ==================== 💱 سعر الصرف ==================== //
 
-let currentExchangeRate = 15000.0;
+let currentExchangeRate = 150.0;
 
 const fetchExchangeRateFromServer = () => {
   https.get('https://liranews.info/api/public/v1/price/usdsypd', {
@@ -147,46 +146,6 @@ setInterval(fetchExchangeRateFromServer, 15 * 60 * 1000);
 
 let serverActiveOrders = [];
 let kitchenOrders = [];
-
-// ==================== 🔢 نظام العدادات النطاقية المنفصلة ==================== //
-const getNextRangeInvoiceNumber = (orderType) => {
-  let counterData = { customerLast: 0, cashierLast: 2000, deliveryLast: 4000 };
-  
-  try {
-    if (fs.existsSync(counterFile)) {
-      const content = JSON.parse(fs.readFileSync(counterFile, 'utf8'));
-      counterData.customerLast = parseInt(content.customerLast, 10) || 0;
-      counterData.cashierLast = parseInt(content.cashierLast, 10) || 2000;
-      counterData.deliveryLast = parseInt(content.deliveryLast, 10) || 4000;
-    }
-  } catch (e) {
-    // القيم الافتراضية عند الخطأ
-  }
-
-  let assignedNumber = 1;
-
-  if (orderType === 'customer') {
-    // 📱 تطبيق الزبون الداخلي: من 1 إلى 2000 (يعود إلى 1 عند التجاوز)
-    counterData.customerLast++;
-    if (counterData.customerLast > 2000) counterData.customerLast = 1; 
-    assignedNumber = counterData.customerLast;
-  } 
-  else if (orderType === 'cashier') {
-    // 🖨️ الكاشير والطلب المباشر: من 2001 إلى 4000 (يعود إلى 2001 عند التجاوز)
-    counterData.cashierLast++;
-    if (counterData.cashierLast > 4000) counterData.cashierLast = 2001; 
-    assignedNumber = counterData.cashierLast;
-  } 
-  else if (orderType === 'delivery') {
-    // 🛵 الدليفري: من 4001 إلى 6000 (يعود إلى 4001 عند التجاوز)
-    counterData.deliveryLast++;
-    if (counterData.deliveryLast > 6000) counterData.deliveryLast = 4001; 
-    assignedNumber = counterData.deliveryLast;
-  }
-
-  writeJsonFile(counterFile, counterData);
-  return assignedNumber;
-};
 
 // ==================== 🟢 منع تكرار إشعارات الجهوزية ==================== //
 
@@ -274,11 +233,6 @@ const initializeJsonFile = (filePath) => {
   reportsFile,
   kitchenOrdersFile
 ].forEach(initializeJsonFile);
-
-// تهيئة ملف العداد بالنطاقات المخصصة في حال لم يكن موجوداً
-if (!fs.existsSync(counterFile)) {
-  fs.writeFileSync(counterFile, JSON.stringify({ customerLast: 0, cashierLast: 2000, deliveryLast: 4000 }, null, 2), 'utf8');
-}
 
 // ==================== 📂 قراءة وكتابة JSON ==================== //
 
@@ -834,6 +788,11 @@ io.on('connection', (socket) => {
     );
   });
 
+  socket.on('get_today_orders', () => {
+    socket.emit('initial_orders', serverActiveOrders);
+    console.log(`📦 تم إرسال سجل طلبات اليوم بالكامل للكاشير (${serverActiveOrders.length} طلب).`);
+  });
+
   // 🛵 جلب طلبات الدليفري الجاهزة فقط للسائق عند الاتصال
   socket.on('get_driver_orders', () => {
     const readyDeliveryOrders = serverActiveOrders.filter(
@@ -1120,7 +1079,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== 📥 استقبال طلبات الزبائن (مع الترقيم النطاقي الدقيق والرد الفوري) ==================== //
+  // ==================== 📥 استقبال طلبات الزبائن (بدون عداد سيرفر وبدون تكرار) ==================== //
 
   socket.on('send_order', (orderData, callback) => {
 
@@ -1138,7 +1097,9 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // تحديد نوع النطاق بناءً على مصدر الطلب أو خصائصه
+    // اعتماد الرقم أو المعرّف القادم من الكاشير حصرياً دون استخدام عداد السيرفر
+    const clientInvoiceNumber = orderData.invoiceNumber ?? orderData.orderNumber ?? orderId;
+
     let source = orderData.orderSource || 'cashier';
     if (orderData.isDelivery === true) {
       source = 'delivery';
@@ -1146,24 +1107,19 @@ io.on('connection', (socket) => {
       source = 'customer';
     }
 
-    // استخدام رقم الفاتورة القادم محلياً من الجهاز إن وُجد، وإلا التوليد التلقائي كخيار احتياطي
-    const incomingInvoiceNumber = orderData.invoiceNumber ?? orderData.orderNumber;
-    const hasLocalNumber = incomingInvoiceNumber !== undefined && incomingInvoiceNumber !== null && String(incomingInvoiceNumber).trim() !== '';
-    const serialInvoiceNumber = hasLocalNumber ? incomingInvoiceNumber : getNextRangeInvoiceNumber(source);
-
     const normalizedOrder = {
       ...orderData,
       id: orderId,
       orderId: orderId,
-      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي ضمن النطاق الصحيح
-      orderNumber: serialInvoiceNumber,
+      invoiceNumber: clientInvoiceNumber,
+      orderNumber: clientInvoiceNumber,
       status: orderData.status || 'new',
       fromCustomerApp: source === 'customer', 
       fromCashier: source === 'cashier'
     };
 
     const existingIndex = serverActiveOrders.findIndex(
-      (o) => getKitchenOrderId(o) === orderId
+      (o) => getKitchenOrderId(o) === orderId || (o.invoiceNumber && o.invoiceNumber.toString() === clientInvoiceNumber.toString())
     );
 
     if (existingIndex === -1) {
@@ -1175,20 +1131,19 @@ io.on('connection', (socket) => {
       };
     }
 
-    // 🛑 التعديل الجذري لمنع تجمد الكاشير: بث الطلب لباقي الأجهزة فقط وعدم إرساله للكاشير المرسل نفسه
+    // 🛑 عدم إرسال الطلب لنفس الكاشير المرسل منعاً للتكرار المزدوج[cite: 12]
     socket.broadcast.emit('new_order_to_cashier', normalizedOrder);
 
-    // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة عبر الـ Callback
     if (typeof callback === 'function') {
       callback({
         success: true,
-        invoiceNumber: serialInvoiceNumber,
-        orderNumber: serialInvoiceNumber,
+        invoiceNumber: clientInvoiceNumber,
+        orderNumber: clientInvoiceNumber,
         orderId: orderId
       });
     }
 
-    console.log(`📥 [${source.toUpperCase()}] تم استقبال الطلب برقم تسلسلي ضمن النطاق:`, serialInvoiceNumber);
+    console.log(`📥 [${source.toUpperCase()}] تم استقبال وحفظ الطلب بالرقم المحلي:`, clientInvoiceNumber);
   });
 
   // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
