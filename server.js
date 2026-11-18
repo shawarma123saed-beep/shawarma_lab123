@@ -269,7 +269,7 @@ const initializeJsonFile = (filePath) => {
   cancelledFile,
   employeesFile,
   advancesFile,
-  leavesFile, // 🌟 تهيئة ملف الإجازات
+  leavesFile, // 🌟 ملف الإجازات الجديد
   ratingsFile,
   reportsFile,
   kitchenOrdersFile
@@ -834,6 +834,11 @@ io.on('connection', (socket) => {
     );
   });
 
+  socket.on('get_today_orders', () => {
+    socket.emit('initial_orders', serverActiveOrders);
+    console.log(`📦 تم إرسال سجل طلبات اليوم بالكامل للكاشير (${serverActiveOrders.length} طلب).`);
+  });
+
   // 🛵 جلب طلبات الدليفري الجاهزة فقط للسائق عند الاتصال
   socket.on('get_driver_orders', () => {
     const readyDeliveryOrders = serverActiveOrders.filter(
@@ -1120,7 +1125,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== 📥 استقبال طلبات الزبائن (مع الترقيم النطاقي الدقيق والتوجيه التلقائي للمطبخ) ==================== //
+  // ==================== 📥 استقبال طلبات الزبائن (بدون إرسالها للمطبخ تلقائياً بانتظار تأكيد الكاشير) ==================== //
 
   socket.on('send_order', (orderData, callback) => {
 
@@ -1157,7 +1162,7 @@ io.on('connection', (socket) => {
       orderId: orderId,
       invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي ضمن النطاق الصحيح
       orderNumber: serialInvoiceNumber,
-      status: orderData.status || 'new',
+      status: orderData.status || 'pending', // 🛑 تعيين الحالة كمعلقة بانتظار اعتماد الكاشير
       fromCustomerApp: source === 'customer', 
       fromCashier: source === 'cashier'
     };
@@ -1175,27 +1180,8 @@ io.on('connection', (socket) => {
       };
     }
 
-    // 🛑 التعديل الجذري لمنع تجمد الكاشير: بث الطلب لباقي الأجهزة فقط وعدم إرساله للكاشير المرسل نفسه
+    // 🛑 بث الطلب للكاشير فقط (لا يتم إرساله للمطبخ نهائياً هنا)
     socket.broadcast.emit('new_order_to_cashier', normalizedOrder);
-
-    // 👨‍🍳 إرسال الطلب تلقائياً لشاشة المطبخ وبدء المؤقتات فور استقباله على السيرفر
-    upsertKitchenOrder(normalizedOrder);
-    io.emit('new_kitchen_order', normalizedOrder);
-
-    if (kitchenTimers[orderId]) {
-      clearTimeout(kitchenTimers[orderId]);
-    }
-
-    kitchenTimers[orderId] = setTimeout(() => {
-      console.log(`⚠️ الطلب #${orderId} تأخر أكثر من 15 دقيقة`);
-      io.emit('admin_order_delayed_warning', {
-        orderId: orderId,
-        tableNumber: normalizedOrder.tableNumber || '1',
-        items: normalizedOrder.items || [],
-        createdAt: normalizedOrder.createdAt || new Date().toISOString(),
-        delayedMinutes: 15
-      });
-    }, 15 * 60 * 1000);
 
     // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة عبر الـ Callback
     if (typeof callback === 'function') {
@@ -1207,7 +1193,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    console.log(`📥 [${source.toUpperCase()}] تم استقبال الطلب برقم تسلسلي ضمن النطاق وتوجيهه للمطبخ:`, serialInvoiceNumber);
+    console.log(`📥 [${source.toUpperCase()}] تم استقبال الطلب برقم تسلسلي ضمن النطاق (معلق بانتظار تأكيد الكاشير):`, serialInvoiceNumber);
   });
 
   // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
@@ -1397,7 +1383,7 @@ io.on('connection', (socket) => {
     checkAndArchiveCompletedOrders();
   });
 
-  // ==================== 👨‍🍳 إرسال طلب للمطبخ ==================== //
+  // ==================== 👨‍🍳 إرسال طلب للمطبخ (بعد موافقة وتأكيد الكاشير حصراً) ==================== //
 
   socket.on('send_to_kitchen', (orderData) => {
 
@@ -1419,6 +1405,7 @@ io.on('connection', (socket) => {
       ...orderData,
       id: orderId,
       orderId: orderId,
+      status: 'confirmed', // تثبيت الحالة كـ مؤكد عند إرساله للمطبخ
       fromCustomerApp: orderData.fromCustomerApp === true,
     };
 
