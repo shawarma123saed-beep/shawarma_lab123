@@ -1157,15 +1157,19 @@ io.on('connection', (socket) => {
     const hasLocalNumber = incomingInvoiceNumber !== undefined && incomingInvoiceNumber !== null && String(incomingInvoiceNumber).trim() !== '';
     const serialInvoiceNumber = hasLocalNumber ? incomingInvoiceNumber : getNextRangeInvoiceNumber(source);
 
+    // ⚡ التعديل المطلوب: إذا كان الطلب مباشراً أو من الكاشير، تعيين حالته كـ confirmed وإرساله للمطبخ فوراً
+    const isDirectOrCashier = source === 'cashier' || orderData.isDirectOrder === true || orderData.isTakeaway === true || orderData.fromCashier === true;
+    const initialStatus = isDirectOrCashier ? 'confirmed' : (orderData.status || 'pending');
+
     const normalizedOrder = {
       ...orderData,
       id: orderId,
       orderId: orderId,
-      invoiceNumber: serialInvoiceNumber, // رقم الفاتورة التسلسلي ضمن النطاق الصحيح
+      invoiceNumber: serialInvoiceNumber,
       orderNumber: serialInvoiceNumber,
-      status: orderData.status || 'pending', // 🛑 تعيين الحالة كمعلقة بانتظار اعتماد الكاشير
+      status: initialStatus, 
       fromCustomerApp: source === 'customer', 
-      fromCashier: source === 'cashier'
+      fromCashier: source === 'cashier' || isDirectOrCashier
     };
 
     const existingIndex = serverActiveOrders.findIndex(
@@ -1184,7 +1188,14 @@ io.on('connection', (socket) => {
     // 💾 الحفظ الفوري والدائم في ملف القرص لحمايتها من انقطاع التيار الكهربائي
     saveActiveOrders();
 
-    // 🛑 بث الطلب للكاشير فقط (لا يتم إرساله للمطبخ نهائياً هنا إلا بعد موافقة الكاشير عبر send_to_kitchen)
+    // ⚡ إذا كان الطلب مباشراً أو من الكاشير، إرساله فوراً للمطبخ بضربة واحدة
+    if (isDirectOrCashier) {
+      upsertKitchenOrder(normalizedOrder);
+      io.emit('new_kitchen_order', normalizedOrder);
+      console.log(`⚡ [الطلب المباشر/الكاشير] تم إرسال الطلب #${orderId} للمطبخ فوراً.`);
+    }
+
+    // بث الطلب للكاشير
     io.emit('new_order', normalizedOrder);
     socket.broadcast.emit('new_order_to_cashier', normalizedOrder);
 
