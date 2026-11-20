@@ -49,7 +49,7 @@ if (!fs.existsSync(dataDir)) {
 
 // نقل بيانات الموظفين القديمة إلى الـ Volume مرة واحدة فقط، دون استبدال أي ملف موجود فيه.
 if (path.resolve(dataDir) !== path.resolve(legacyDataDir)) {
-  for (const fileName of ['employees.json', 'advances.json', 'leaves.json']) {
+  for (const fileName of ['employees.json', 'advances.json', 'leaves.json', 'active_orders.json']) {
     const oldFile = path.join(legacyDataDir, fileName);
     const newFile = path.join(dataDir, fileName);
     if (fs.existsSync(oldFile) && !fs.existsSync(newFile)) {
@@ -75,6 +75,7 @@ const ratingsFile = path.join(dataDir, 'ratings.json');
 const reportsFile = path.join(dataDir, 'daily_reports.json');
 const kitchenOrdersFile = path.join(dataDir, 'kitchen_orders.json');
 const counterFile = path.join(dataDir, 'order_counter.json'); // 🔢 ملف عداد الفواتير التسلسلي
+const activeOrdersFile = path.join(dataDir, 'active_orders.json'); // 🌟 ملف تخزين الطلبات النشطة لحمايتها من انقطاع الكهرباء
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -142,143 +143,6 @@ const fetchExchangeRateFromServer = () => {
 
 fetchExchangeRateFromServer();
 setInterval(fetchExchangeRateFromServer, 15 * 60 * 1000);
-
-// ==================== 📦 الطلبات النشطة ==================== //
-
-let serverActiveOrders = [];
-let kitchenOrders = [];
-
-// ==================== 🔢 نظام العدادات النطاقية المنفصلة ==================== //
-const getNextRangeInvoiceNumber = (orderType) => {
-  let counterData = { customerLast: 0, cashierLast: 2000, deliveryLast: 4000 };
-  
-  try {
-    if (fs.existsSync(counterFile)) {
-      const content = JSON.parse(fs.readFileSync(counterFile, 'utf8'));
-      counterData.customerLast = parseInt(content.customerLast, 10) || 0;
-      counterData.cashierLast = parseInt(content.cashierLast, 10) || 2000;
-      counterData.deliveryLast = parseInt(content.deliveryLast, 10) || 4000;
-    }
-  } catch (e) {
-    // القيم الافتراضية عند الخطأ
-  }
-
-  let assignedNumber = 1;
-
-  if (orderType === 'customer') {
-    // 📱 تطبيق الزبون الداخلي: من 1 إلى 2000 (يعود إلى 1 عند التجاوز)
-    counterData.customerLast++;
-    if (counterData.customerLast > 2000) counterData.customerLast = 1; 
-    assignedNumber = counterData.customerLast;
-  } 
-  else if (orderType === 'cashier') {
-    // 🖨️ الكاشير والطلب المباشر: من 2001 إلى 4000 (يعود إلى 2001 عند التجاوز)
-    counterData.cashierLast++;
-    if (counterData.cashierLast > 4000) counterData.cashierLast = 2001; 
-    assignedNumber = counterData.cashierLast;
-  } 
-  else if (orderType === 'delivery') {
-    // 🛵 الدليفري: من 4001 إلى 6000 (يعود إلى 4001 عند التجاوز)
-    counterData.deliveryLast++;
-    if (counterData.deliveryLast > 6000) counterData.deliveryLast = 4001; 
-    assignedNumber = counterData.deliveryLast;
-  }
-
-  writeJsonFile(counterFile, counterData);
-  return assignedNumber;
-};
-
-// ==================== 🟢 منع تكرار إشعارات الجهوزية ==================== //
-
-const readyNotifiedOrders = new Set();
-
-const normalizeOrderId = (id) => {
-  if (id === undefined || id === null || id === '') {
-    return null;
-  }
-
-  return String(id);
-};
-
-// ==================== 📦 أرشفة وتفريغ الطلبات المنتهية عند بلوغ 20 طلباً ==================== //
-const checkAndArchiveCompletedOrders = () => {
-  // فحص الطلبات التي انتهت كلياً وتم إنجازها/تسليمها
-  const finishedOrders = serverActiveOrders.filter(o => {
-    const status = String(o.status || '').toLowerCase();
-    return ['delivered', 'completed', 'paid', 'ready'].includes(status);
-  });
-
-  // إذا وصل عدد الطلبات المنتهية إلى 20 أو أكثر
-  if (finishedOrders.length >= 20) {
-    let invoices = readJsonFile(invoicesFile);
-
-    finishedOrders.forEach(order => {
-      const orderId = normalizeOrderId(order.id ?? order.orderId);
-      if (!orderId) return;
-
-      const exists = invoices.some(inv => normalizeOrderId(inv.orderId || inv.id) === orderId);
-      if (!exists) {
-        invoices.push({
-          ...order,
-          archivedAt: new Date().toISOString(),
-          archiveReason: 'Batch archive of 20 finished orders'
-        });
-      }
-    });
-
-    // حفظ الفواتير المؤرشفة نهائياً لدى المدير
-    writeJsonFile(invoicesFile, invoices);
-
-    // استخراج معرّفات الطلبات المؤرشفة لإزالتها من شاشة الكاشير والذاكرة الحية
-    const finishedIds = new Set(finishedOrders.map(o => normalizeOrderId(o.id ?? o.orderId)));
-    serverActiveOrders = serverActiveOrders.filter(o => !finishedIds.has(normalizeOrderId(o.id ?? o.orderId)));
-
-    // تحديث الشاشات
-    io.emit('initial_orders', serverActiveOrders);
-    io.emit('update_admin_invoices', invoices);
-
-    console.log(`📦 تم أرشفة ${finishedOrders.length} طلب منتهٍ بنجاح لدى المدير وحذفهم من شاشة الكاشير لتفريغ الذاكرة.`);
-  }
-};
-
-// ==================== 🟢 تهيئة الملفات (مع الحفاظ على البيانات الموجودة وعدم تصفيرها) ==================== //
-
-const initializeJsonFile = (filePath) => {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify([], null, 2),
-      'utf8'
-    );
-    console.log('📄 تم إنشاء الملف الافتراضي:', path.basename(filePath));
-  } else {
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      if (content.trim() === '') {
-        fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
-      }
-    } catch (e) {
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
-    }
-  }
-};
-
-[
-  menuFile,
-  invoicesFile,
-  cancelledFile,
-  employeesFile,
-  advancesFile,
-  leavesFile, // 🌟 ملف الإجازات الجديد
-  ratingsFile,
-  reportsFile,
-  kitchenOrdersFile
-].forEach(initializeJsonFile);
-
-// تهيئة ملف العداد بالنطاقات المخصصة في حال لم يكن موجوداً
-if (!fs.existsSync(counterFile)) {
-  fs.writeFileSync(counterFile, JSON.stringify({ customerLast: 0, cashierLast: 2000, deliveryLast: 4000 }, null, 2), 'utf8');
-}
 
 // ==================== 📂 قراءة وكتابة JSON ==================== //
 
@@ -349,6 +213,142 @@ const writeJsonFile = (filePath, data) => {
     return false;
   }
 };
+
+// ==================== 📦 الطلبات النشطة واسترجاعها التلقائي من التخزين الدائم ==================== //
+
+let serverActiveOrders = readJsonFile(activeOrdersFile);
+let kitchenOrders = [];
+
+const saveActiveOrders = () => {
+  writeJsonFile(activeOrdersFile, serverActiveOrders);
+};
+
+// ==================== 🔢 نظام العدادات النطاقية المنفصلة ==================== //
+const getNextRangeInvoiceNumber = (orderType) => {
+  let counterData = { customerLast: 0, cashierLast: 2000, deliveryLast: 4000 };
+  
+  try {
+    if (fs.existsSync(counterFile)) {
+      const content = JSON.parse(fs.readFileSync(counterFile, 'utf8'));
+      counterData.customerLast = parseInt(content.customerLast, 10) || 0;
+      counterData.cashierLast = parseInt(content.cashierLast, 10) || 2000;
+      counterData.deliveryLast = parseInt(content.deliveryLast, 10) || 4000;
+    }
+  } catch (e) {
+    // القيم الافتراضية عند الخطأ
+  }
+
+  let assignedNumber = 1;
+
+  if (orderType === 'customer') {
+    // 📱 تطبيق الزبون الداخلي: من 1 إلى 2000 (يعود إلى 1 عند التجاوز)
+    counterData.customerLast++;
+    if (counterData.customerLast > 2000) counterData.customerLast = 1; 
+    assignedNumber = counterData.customerLast;
+  } 
+  else if (orderType === 'cashier') {
+    // 🖨️ الكاشير والطلب المباشر: من 2001 إلى 4000 (يعود إلى 2001 عند التجاوز)
+    counterData.cashierLast++;
+    if (counterData.cashierLast > 4000) counterData.cashierLast = 2001; 
+    assignedNumber = counterData.cashierLast;
+  } 
+  else if (orderType === 'delivery') {
+    // 🛵 الدليفري: من 4001 إلى 6000 (يعود إلى 4001 عند التجاوز)
+    counterData.deliveryLast++;
+    if (counterData.deliveryLast > 6000) counterData.deliveryLast = 4001; 
+    assignedNumber = counterData.deliveryLast;
+  }
+
+  writeJsonFile(counterFile, counterData);
+  return assignedNumber;
+};
+
+// ==================== 🟢 منع تكرار إشعارات الجهوزية ==================== //
+
+const readyNotifiedOrders = new Set();
+
+const normalizeOrderId = (id) => {
+  if (id === undefined || id === null || id === '') {
+    return null;
+  }
+
+  return String(id);
+};
+
+// ==================== 📦 أرشفة الفواتير للمدير مع حماية دائمة لطلبات الكاشير وعدم حذفها ==================== //
+const checkAndArchiveCompletedOrders = () => {
+  // فحص الطلبات التي انتهت كلياً وتم إنجازها/تسليمها
+  const finishedOrders = serverActiveOrders.filter(o => {
+    const status = String(o.status || '').toLowerCase();
+    return ['delivered', 'completed', 'paid', 'ready'].includes(status);
+  });
+
+  if (finishedOrders.length > 0) {
+    let invoices = readJsonFile(invoicesFile);
+    let hasNewInvoices = false;
+
+    finishedOrders.forEach(order => {
+      const orderId = normalizeOrderId(order.id ?? order.orderId);
+      if (!orderId) return;
+
+      const exists = invoices.some(inv => normalizeOrderId(inv.orderId || inv.id) === orderId);
+      if (!exists) {
+        invoices.push({
+          ...order,
+          archivedAt: new Date().toISOString(),
+          archiveReason: 'Archived finished order for manager record'
+        });
+        hasNewInvoices = true;
+      }
+    });
+
+    // حفظ الفواتير المؤرشفة لدى المدير مع الإبقاء على كافة الطلبات في شاشة الكاشير حتى إغلاق الصندوق
+    if (hasNewInvoices) {
+      writeJsonFile(invoicesFile, invoices);
+      io.emit('update_admin_invoices', invoices);
+    }
+  }
+};
+
+// ==================== 🟢 تهيئة الملفات (مع الحفاظ على البيانات الموجودة وعدم تصفيرها) ==================== //
+
+const initializeJsonFile = (filePath) => {
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify([], null, 2),
+      'utf8'
+    );
+    console.log('📄 تم إنشاء الملف الافتراضي:', path.basename(filePath));
+  } else {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      if (content.trim() === '') {
+        fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
+      }
+    } catch (e) {
+      fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
+    }
+  }
+};
+
+[
+  menuFile,
+  invoicesFile,
+  cancelledFile,
+  employeesFile,
+  advancesFile,
+  leavesFile, // 🌟 ملف الإجازات الجديد
+  ratingsFile,
+  reportsFile,
+  kitchenOrdersFile,
+  activeOrdersFile
+].forEach(initializeJsonFile);
+
+// تهيئة ملف العداد بالنطاقات المخصصة في حال لم يكن موجوداً
+if (!fs.existsSync(counterFile)) {
+  fs.writeFileSync(counterFile, JSON.stringify({ customerLast: 0, cashierLast: 2000, deliveryLast: 4000 }, null, 2), 'utf8');
+}
 
 // ==================== 👥 معالجة قوائم الموظفين والسلف والإجازات ==================== //
 
@@ -628,6 +628,7 @@ const notifyOrderReady = (orderData) => {
       ...readyPayload,
       status: 'ready'
     };
+    saveActiveOrders(); // 💾 حفظ التحديث المستمر
   }
 
   io.emit('order_ready_for_customer', readyPayload);
@@ -830,7 +831,7 @@ io.on('connection', (socket) => {
     socket.emit('initial_orders', serverActiveOrders);
 
     console.log(
-      `📦 تم إرسال ${serverActiveOrders.length} طلب نشط للكاشير`
+      `📦 تم إرسال ${serverActiveOrders.length} طلب نشط للكاشير من التخزين الدائم`
     );
   });
 
@@ -848,10 +849,10 @@ io.on('connection', (socket) => {
     console.log(`🛵 تم إرسال ${readyDeliveryOrders.length} طلب دليفري جاهز للسائق`);
   });
 
+  // 🛑 حماية طلبات الكاشير: لا يتم تفريغ الطلبات إلا عند إغلاق الصندوق وإرسال التقرير اليومي فقط
   socket.on('clear_server_active_orders', () => {
-    serverActiveOrders = [];
-    console.log('🧹 تم تفريغ طلبات الكاشير');
-    io.emit('initial_orders', []);
+    console.log('🛡️ تم منع تفريغ طلبات الكاشير - الطلبات محمية ولا تُحذف إلا عند إرسال التقرير اليومي');
+    socket.emit('initial_orders', serverActiveOrders);
   });
 
   // ==================== 🍳 طلبات المطبخ ==================== //
@@ -1125,7 +1126,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== 📥 استقبال طلبات الزبائن (توجيهها للكاشير حصراً وعدم إرسالها للمطبخ تلقائياً) ==================== //
+  // ==================== 📥 استقبال طلبات الزبائن وتخزينها فوراً ودائماً ==================== //
 
   socket.on('send_order', (orderData, callback) => {
 
@@ -1180,7 +1181,10 @@ io.on('connection', (socket) => {
       };
     }
 
-    // 🛑 التعديل الأساسي: إرسال الطلب وحفظه لشاشة الكاشير حصراً (وليس للمطبخ نهائياً هنا)
+    // 💾 الحفظ الفوري والدائم في ملف القرص لحمايتها من انقطاع التيار الكهربائي
+    saveActiveOrders();
+
+    // 🛑 بث الطلب للكاشير فقط (لا يتم إرساله للمطبخ نهائياً هنا إلا بعد موافقة الكاشير عبر send_to_kitchen)
     io.emit('new_order', normalizedOrder);
     socket.broadcast.emit('new_order_to_cashier', normalizedOrder);
 
@@ -1194,7 +1198,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    console.log(`📥 [${source.toUpperCase()}] تم استقبال الطلب برقم تسلسلي ضمن النطاق وإرساله للكاشير (معلق بانتظار التأكيد):`, serialInvoiceNumber);
+    console.log(`📥 [${source.toUpperCase()}] تم حفظ الطلب رقم ${serialInvoiceNumber} في الذاكرة والقرص الدائم بنجاح.`);
   });
 
   // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
@@ -1212,6 +1216,7 @@ io.on('connection', (socket) => {
         id: orderId,
         orderId: orderId
       };
+      saveActiveOrders(); // 💾 حفظ التعديل فوراً
     }
 
     socket.broadcast.emit('order_updated_broadcast', updatedOrder);
@@ -1223,11 +1228,11 @@ io.on('connection', (socket) => {
     const orderId = normalizeOrderId(data.orderId ?? data.id);
     if (!orderId) return;
 
-    serverActiveOrders = serverActiveOrders.filter(o => getKitchenOrderId(o) !== orderId);
+    // 🛑 حذف الطلب من المطبخ فقط عند الانتهاء، بينما يبقى في الكاشير محمياً حتى إغلاق الصندوق
     removeKitchenOrder(orderId);
 
     io.emit('order_removed_broadcast', { orderId: orderId });
-    console.log(`🗑️ تم بث إزالة الطلب #${orderId} لكافة المتصفحات والأجهزة المتصلة.`);
+    console.log(`🗑️ تم بث إزالة الطلب #${orderId} من المطبخ مع بقائه محمياً لدى الكاشير.`);
   });
 
   // ==================== 🚀 تحويل الطلب للمدير ==================== //
@@ -1299,6 +1304,7 @@ io.on('connection', (socket) => {
         orderId: orderId,
         status: status
       };
+      saveActiveOrders(); // 💾 حفظ تغيير الحالة (مثل منتهي أو قيد التحضير) في القرص الدائم فوراً
     }
 
     const normalizedStatusData = {
@@ -1337,7 +1343,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    // 🔍 فحص هل وصل عدد الطلبات المنتهية إلى 20 لأرشفتها وتفريغ شاشة الكاشير
+    // 🔍 فحص أرشفة الفواتير للمدير دون حذف أي طلب من الكاشير
     checkAndArchiveCompletedOrders();
   });
 
@@ -1357,9 +1363,17 @@ io.on('connection', (socket) => {
       `🛵 تم تسليم طلب الدليفري #${orderId}`
     );
 
-    serverActiveOrders = serverActiveOrders.filter(
-      (o) => getKitchenOrderId(o) !== orderId
+    // تحديث حالة الطلب إلى delivered مع إبقائه محمياً في قائمة الكاشير حتى إغلاق الصندوق وحفظه
+    const orderIndex = serverActiveOrders.findIndex(
+      (o) => getKitchenOrderId(o) === orderId
     );
+    if (orderIndex !== -1) {
+      serverActiveOrders[orderIndex] = {
+        ...serverActiveOrders[orderIndex],
+        status: 'delivered'
+      };
+      saveActiveOrders(); // 💾 حفظ تحديث التسليم
+    }
 
     removeKitchenOrder(orderId);
 
@@ -1422,6 +1436,7 @@ io.on('connection', (socket) => {
     } else {
       serverActiveOrders.push(normalizedOrder);
     }
+    saveActiveOrders(); // 💾 حفظ التحديث الدائم
 
     const saved = upsertKitchenOrder(normalizedOrder);
 
@@ -1502,6 +1517,7 @@ io.on('connection', (socket) => {
         ...serverActiveOrders[activeIndex],
         ...normalizedOrder
       };
+      saveActiveOrders(); // 💾 حفظ حالة المطبخ والتحضير الدائمة
     }
 
     io.emit('kitchen_order_updated', normalizedOrder);
@@ -1591,7 +1607,7 @@ io.on('connection', (socket) => {
     );
   });
 
-  // ==================== 📊 التقرير اليومي وإغلاق الصندوق (مع التطهير الجذري للذاكرة) ==================== //
+  // ==================== 📊 التقرير اليومي وإغلاق الصندوق (الحذف الوحيد للطلبات) ==================== //
 
   socket.on('close_register_and_send_report', (reportData) => {
 
@@ -1608,10 +1624,12 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 🧹 التطهير الجذري الكامل للذاكرة الحية (RAM) عند إغلاق الصندوق نهاية اليوم المالي حصراً
+    // 🧹 التطهير الجذري الكامل للذاكرة وملف القرص الدائم للطلبات حصراً عند إغلاق الصندوق نهاية اليوم المالي
     serverActiveOrders = [];
+    saveActiveOrders();
+
     kitchenOrders = [];
-    saveKitchenOrders(); // تحديث ملف المطبخ ليفرغ تماماً
+    saveKitchenOrders(); 
 
     // إبقاء إشعار تفريغ الشاشات لكافة الأجهزة لبداية يوم جديد نظيف
     io.emit('initial_orders', []);
@@ -1619,7 +1637,7 @@ io.on('connection', (socket) => {
     io.emit('admin_daily_report_received', reportData);
 
     console.log(
-      '📊 تم حفظ التقرير المالي اليومي وتفريغ الذاكرة والطلبات لبداية يوم جديد بنجاح 🚀'
+      '📊 تم حفظ التقرير المالي اليومي وتفريغ الذاكرة والطلبات لبداية يوم عمل جديد بنجاح 🚀'
     );
   });
 
@@ -1649,9 +1667,11 @@ io.on('connection', (socket) => {
 
     writeJsonFile(cancelledFile, cancelledOrders);
 
+    // 🛑 حذف الطلب حصراً عند طلب الإلغاء الصريح من الكاشير وحفظ التغيير الدائم
     serverActiveOrders = serverActiveOrders.filter(
       (o) => getKitchenOrderId(o) !== orderId
     );
+    saveActiveOrders();
 
     removeKitchenOrder(orderId);
 
@@ -1682,7 +1702,7 @@ io.on('connection', (socket) => {
     io.emit('order_removed_broadcast', { orderId: orderId });
 
     console.log(
-      `🚨 تم إلغاء الطلب #${orderId}. السبب: ${cancelData.cancellationReason || 'بدون سبب'}`
+      `🚨 تم إلغاء الطلب #${orderId} وحذفه بناءً على طلب الكاشير. السبب: ${cancelData.cancellationReason || 'بدون سبب'}`
     );
   });
 
@@ -1742,11 +1762,11 @@ server.listen(PORT, () => {
   );
 
   console.log(
-    `🍳 ملف طلبات المطبخ: ${kitchenOrdersFile}`
+    `📦 عدد الطلبات النشطة المسترجعة من القرص الدائم: ${serverActiveOrders.length}`
   );
 
   console.log(
-    `📦 عدد طلبات المطبخ المسترجعة: ${kitchenOrders.length}`
+    `🍳 عدد طلبات المطبخ المسترجعة: ${kitchenOrders.length}`
   );
 
   console.log(
@@ -1762,7 +1782,7 @@ server.listen(PORT, () => {
   );
 
   console.log(
-    '✅ ملفات الموظفين والسلف والإجازات لن يتم تصفيرها عند إعادة تشغيل السيرفر'
+    '✅ ملفات الموظفين والسلف والإجازات والطلبات النشطة لن يتم تصفيرها عند إعادة تشغيل السيرفر وانقطاع التيار'
   );
 
   console.log('');
@@ -1770,5 +1790,6 @@ server.listen(PORT, () => {
   console.log('📁 ملف الموظفين:', employeesFile);
   console.log('📁 ملف السلف والدفعات:', advancesFile);
   console.log('📁 ملف الإجازات:', leavesFile);
+  console.log('📁 ملف الطلبات النشطة الدائم:', activeOrdersFile);
   console.log('=========================================================');
 });
