@@ -1013,7 +1013,7 @@ io.on('connection', (socket) => {
         });
       }
 
-    } catch (e) {
+    } catch (e)  {
       console.error('❌ فشل حفظ الموظفين:', e.message);
 
       if (typeof callback === 'function') {
@@ -1126,7 +1126,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // ==================== 📥 استقبال طلبات الزبائن وتخزينها فوراً ودائماً ==================== //
+  // ==================== 📥 استقبال طلبات الزبائن والكاشير ==================== //
 
   socket.on('send_order', (orderData, callback) => {
 
@@ -1157,9 +1157,9 @@ io.on('connection', (socket) => {
     const hasLocalNumber = incomingInvoiceNumber !== undefined && incomingInvoiceNumber !== null && String(incomingInvoiceNumber).trim() !== '';
     const serialInvoiceNumber = hasLocalNumber ? incomingInvoiceNumber : getNextRangeInvoiceNumber(source);
 
-    // ⚡ التعديل المطلوب: إذا كان الطلب مباشراً أو من الكاشير، تعيين حالته كـ confirmed وإرساله للمطبخ فوراً
+    // ⚡ التعديل المطلوب بدقة: الطلب المباشر من الكاشير أو المؤكد يصبح confirmed، وباقي طلبات الزبائن معلقة pending
     const isDirectOrCashier = source === 'cashier' || orderData.isDirectOrder === true || orderData.isTakeaway === true || orderData.fromCashier === true;
-    const initialStatus = isDirectOrCashier ? 'confirmed' : (orderData.status || 'pending');
+    const initialStatus = (isDirectOrCashier || orderData.status === 'confirmed') ? 'confirmed' : 'pending';
 
     const normalizedOrder = {
       ...orderData,
@@ -1188,11 +1188,13 @@ io.on('connection', (socket) => {
     // 💾 الحفظ الفوري والدائم في ملف القرص لحمايتها من انقطاع التيار الكهربائي
     saveActiveOrders();
 
-    // ⚡ إذا كان الطلب مباشراً أو من الكاشير، إرساله فوراً للمطبخ بضربة واحدة
-    if (isDirectOrCashier) {
+    // 👨‍🍳 إرسال الطلب للمطبخ حصراً إذا كان مباشراً أو مؤكداً، وإلا إبقاؤه معلقاً لمنع دخوله المطبخ بلا موافقة الكاشير
+    if (initialStatus === 'confirmed') {
       upsertKitchenOrder(normalizedOrder);
       io.emit('new_kitchen_order', normalizedOrder);
-      console.log(`⚡ [الطلب المباشر/الكاشير] تم إرسال الطلب #${orderId} للمطبخ فوراً.`);
+      console.log(`⚡ [طلب مباشر/مؤكد] تم إرسال الطلب #${orderId} للمطبخ فوراً.`);
+    } else {
+      console.log(`⏳ [طلب معلق] تم استلام طلب الزبون #${orderId} بحالة معلق ولن يدخل المطبخ إلا بموافقة الكاشير.`);
     }
 
     // بث الطلب للكاشير
@@ -1209,7 +1211,7 @@ io.on('connection', (socket) => {
       });
     }
 
-    console.log(`📥 [${source.toUpperCase()}] تم حفظ الطلب رقم ${serialInvoiceNumber} في الذاكرة والقرص الدائم بنجاح.`);
+    console.log(`📥 [${source.toUpperCase()}] تم حفظ الطلب رقم ${serialInvoiceNumber} بنجاح.`);
   });
 
   // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
@@ -1409,7 +1411,7 @@ io.on('connection', (socket) => {
     checkAndArchiveCompletedOrders();
   });
 
-  // ==================== 👨‍🍳 إرسال طلب للمطبخ (بعد موافقة وتأكيد الكاشير حصراً) ==================== //
+  // ==================== 👨‍🍳 إرسال الطلب للمطبخ (بعد موافقة وتأكيد الكاشير حصراً) ==================== //
 
   socket.on('send_to_kitchen', (orderData) => {
 
@@ -1442,7 +1444,8 @@ io.on('connection', (socket) => {
     if (activeIndex !== -1) {
       serverActiveOrders[activeIndex] = {
         ...serverActiveOrders[activeIndex],
-        ...normalizedOrder
+        ...normalizedOrder,
+        status: 'confirmed'
       };
     } else {
       serverActiveOrders.push(normalizedOrder);
@@ -1460,7 +1463,7 @@ io.on('connection', (socket) => {
     io.emit('new_kitchen_order', normalizedOrder);
 
     console.log(
-      `👨‍🍳 تم إرسال الطلب #${orderId} للمطبخ بعد موافقة الكاشير`
+      `👨‍🍳 [موافقة الكاشير] تم إرسال الطلب #${orderId} للمطبخ بنجاح.`
     );
 
     if (kitchenTimers[orderId]) {
