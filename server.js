@@ -1157,9 +1157,13 @@ io.on('connection', (socket) => {
     const hasLocalNumber = incomingInvoiceNumber !== undefined && incomingInvoiceNumber !== null && String(incomingInvoiceNumber).trim() !== '';
     const serialInvoiceNumber = hasLocalNumber ? incomingInvoiceNumber : getNextRangeInvoiceNumber(source);
 
-    // ⚡ التعديل المطلوب بدقة: الطلب المباشر من الكاشير أو المؤكد يصبح confirmed، وباقي طلبات الزبائن معلقة pending
-    const isDirectOrCashier = source === 'cashier' || orderData.isDirectOrder === true || orderData.isTakeaway === true || orderData.fromCashier === true;
-    const initialStatus = (isDirectOrCashier || orderData.status === 'confirmed') ? 'confirmed' : 'pending';
+    // ⚡ التعديل المطلوب: الطلب المباشر من الكاشير فقط هو ما يصبح confirmed ويذهب للمطبخ فوراً،
+    // أما طلبات تطبيق الزبون الداخلي أو الدليفري فتصبح معلقة pending ولن تذهب للمطبخ إلا بعد موافقة الكاشير.
+    const isDirectCashierOrder = (source === 'cashier' || orderData.isDirectOrder === true || orderData.isTakeaway === true || orderData.fromCashier === true) 
+                                 && orderData.fromCustomerApp !== true 
+                                 && orderData.isDelivery !== true;
+
+    const initialStatus = isDirectCashierOrder ? 'confirmed' : 'pending';
 
     const normalizedOrder = {
       ...orderData,
@@ -1169,7 +1173,7 @@ io.on('connection', (socket) => {
       orderNumber: serialInvoiceNumber,
       status: initialStatus, 
       fromCustomerApp: source === 'customer', 
-      fromCashier: source === 'cashier' || isDirectOrCashier
+      fromCashier: isDirectCashierOrder
     };
 
     const existingIndex = serverActiveOrders.findIndex(
@@ -1188,13 +1192,13 @@ io.on('connection', (socket) => {
     // 💾 الحفظ الفوري والدائم في ملف القرص لحمايتها من انقطاع التيار الكهربائي
     saveActiveOrders();
 
-    // 👨‍🍳 إرسال الطلب للمطبخ حصراً إذا كان مباشراً أو مؤكداً، وإلا إبقاؤه معلقاً لمنع دخوله المطبخ بلا موافقة الكاشير
+    // 👨‍🍳 إرسال الطلب للمطبخ حصراً إذا كان طلباً مباشراً من الكاشير، وإلا إبقاؤه معلقاً لطلبات الزبون والدليفري لحين موافقة الكاشير
     if (initialStatus === 'confirmed') {
       upsertKitchenOrder(normalizedOrder);
       io.emit('new_kitchen_order', normalizedOrder);
-      console.log(`⚡ [طلب مباشر/مؤكد] تم إرسال الطلب #${orderId} للمطبخ فوراً.`);
+      console.log(`⚡ [طلب مباشر من الكاشير] تم إرسال الطلب #${orderId} للمطبخ فوراً.`);
     } else {
-      console.log(`⏳ [طلب معلق] تم استلام طلب الزبون #${orderId} بحالة معلق ولن يدخل المطبخ إلا بموافقة الكاشير.`);
+      console.log(`⏳ [طلب معلق] تم استلام طلب (${source}) #${orderId} بحالة معلق ولن يدخل المطبخ إلا بموافقة الكاشير.`);
     }
 
     // بث الطلب للكاشير
