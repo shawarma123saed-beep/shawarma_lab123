@@ -883,16 +883,19 @@ io.on('connection', (socket) => {
     socket.emit('menu_data', menu);
   });
 
+  // 🛑 الحذف النهائي الفوري للفواتير المسجلة عند ضغطة تصدير PDF من لوحة المدير
   socket.on('clear_printed_invoices', () => {
     const saved = writeJsonFile(invoicesFile, []);
 
     if (!saved) return;
 
     io.emit('initial_invoices', []);
+    io.emit('update_admin_invoices', []);
 
-    console.log('🗑️ تم تفريغ الفواتير بعد الطباعة');
+    console.log('🗑️ تم تصدير الفواتير المسجلة وحذفها نهائياً من السيرفر والملف بناءً على طلب المدير');
   });
 
+  // 🛑 الحذف النهائي الفوري للطلبات/الفواتير الملغاة عند ضغطة التصدير/التفريغ من لوحة المدير
   socket.on('clear_cancelled_orders', () => {
     const saved = writeJsonFile(cancelledFile, []);
 
@@ -900,7 +903,18 @@ io.on('connection', (socket) => {
 
     io.emit('initial_cancelled_orders', []);
 
-    console.log('🗑️ تم تفريغ الطلبات الملغاة بعد الطباعة');
+    console.log('🗑️ تم تفريغ وحذف الطلبات الملغاة نهائياً من السيرفر والملف بناءً على طلب المدير');
+  });
+
+  // 🛑 الحذف النهائي الفوري للتقييمات عند ضغطة التصدير/التفريغ من لوحة المدير
+  socket.on('clear_ratings', () => {
+    const saved = writeJsonFile(ratingsFile, []);
+
+    if (!saved) return;
+
+    io.emit('initial_ratings_data', []);
+
+    console.log('⭐🗑️ تم تفريغ وحذف تقييمات العملاء نهائياً من السيرفر والملف بناءً على طلب المدير');
   });
 
   // 🌟 الحدث الرئيسي لحفظ الترتيب والوجبات والأسعار تماماً كما يرسلها المدير
