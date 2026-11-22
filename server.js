@@ -82,6 +82,18 @@ if (!fs.existsSync(dataDir)) {
   console.log('📁 تم إنشاء مجلد البيانات بنجاح:', dataDir);
 }
 
+// ==================== 🕒 دالة التوقيت المحلي الدقيق لحظة وصوله للسيرفر ==================== //
+const getLocalDateTimeString = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
 // ==================== 💱 سعر الصرف ==================== //
 
 let currentExchangeRate = 15000.0;
@@ -293,9 +305,11 @@ const checkAndArchiveCompletedOrders = () => {
 
       const exists = invoices.some(inv => normalizeOrderId(inv.orderId || inv.id) === orderId);
       if (!exists) {
+        const exactServerTime = getLocalDateTimeString();
         invoices.push({
           ...order,
-          archivedAt: new Date().toISOString(),
+          createdAt: order.createdAt || exactServerTime,
+          archivedAt: exactServerTime,
           archiveReason: 'Archived finished order for manager record'
         });
         hasNewInvoices = true;
@@ -1171,6 +1185,9 @@ io.on('connection', (socket) => {
     const hasLocalNumber = incomingInvoiceNumber !== undefined && incomingInvoiceNumber !== null && String(incomingInvoiceNumber).trim() !== '';
     const serialInvoiceNumber = hasLocalNumber ? incomingInvoiceNumber : getNextRangeInvoiceNumber(source);
 
+    // توقيت السيرفر المحلي اللحظي
+    const exactServerTime = getLocalDateTimeString();
+
     // ⚡ التعديل المطلوب: الطلب المباشر من الكاشير فقط هو ما يصبح confirmed ويذهب للمطبخ فوراً،
     // أما طلبات تطبيق الزبون الداخلي أو الدليفري فتصبح معلقة pending ولن تذهب للمطبخ إلا بعد موافقة الكاشير.
     const isDirectCashierOrder = (source === 'cashier' || orderData.isDirectOrder === true || orderData.isTakeaway === true || orderData.fromCashier === true) 
@@ -1185,6 +1202,7 @@ io.on('connection', (socket) => {
       orderId: orderId,
       invoiceNumber: serialInvoiceNumber,
       orderNumber: serialInvoiceNumber,
+      createdAt: exactServerTime, // تثبيت وقت وصول الطلب للسيرفر بدقة
       status: initialStatus, 
       fromCustomerApp: source === 'customer', 
       fromCashier: isDirectCashierOrder
@@ -1225,7 +1243,8 @@ io.on('connection', (socket) => {
         success: true,
         invoiceNumber: serialInvoiceNumber,
         orderNumber: serialInvoiceNumber,
-        orderId: orderId
+        orderId: orderId,
+        createdAt: exactServerTime
       });
     }
 
@@ -1600,7 +1619,10 @@ io.on('connection', (socket) => {
 
     if (!exists) {
 
-      invoices.push(invoiceData);
+      invoices.push({
+        ...invoiceData,
+        createdAt: invoiceData.createdAt || getLocalDateTimeString()
+      });
 
       const saved = writeJsonFile(invoicesFile, invoices);
 
@@ -1647,7 +1669,10 @@ io.on('connection', (socket) => {
 
     let reports = readJsonFile(reportsFile);
 
-    reports.push(reportData);
+    reports.push({
+      ...reportData,
+      closedAt: getLocalDateTimeString()
+    });
 
     const saved = writeJsonFile(reportsFile, reports);
 
@@ -1695,7 +1720,10 @@ io.on('connection', (socket) => {
 
     let cancelledOrders = readJsonFile(cancelledFile);
 
-    cancelledOrders.push(cancelData);
+    cancelledOrders.push({
+      ...cancelData,
+      cancelledAt: getLocalDateTimeString()
+    });
 
     writeJsonFile(cancelledFile, cancelledOrders);
 
@@ -1759,7 +1787,10 @@ io.on('connection', (socket) => {
 
     let ratings = readJsonFile(ratingsFile);
 
-    ratings.push(ratingData);
+    ratings.push({
+      ...ratingData,
+      createdAt: getLocalDateTimeString()
+    });
 
     const saved = writeJsonFile(ratingsFile, ratings);
 
