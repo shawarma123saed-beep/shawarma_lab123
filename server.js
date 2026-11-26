@@ -1,4 +1,4 @@
-  const express = require('express');
+const express = require('express');
   const http = require('http');
   const https = require('https');
   const { Server } = require('socket.io');
@@ -234,9 +234,10 @@
     writeJsonFile(activeOrdersFile, serverActiveOrders);
   };
 
-  // ==================== 🟢 منع تكرار إشعارات الجهوزية ==================== //
+  // ==================== 🟢 منع تكرار إشعارات الجهوزية والأحداث ==================== //
 
   const readyNotifiedOrders = new Set();
+  const recentProcessedEvents = new Set(); // 🛡️ نظام منع تكرار الأحداث السريعة
 
   const normalizeOrderId = (id) => {
     if (id === undefined || id === null || id === '') {
@@ -1155,6 +1156,16 @@
         return;
       }
 
+      // 🛡️ منع تكرار معالجة نفس طلب الإرسال السريع خلال 3 ثوانٍ
+      const eventKey = `send_order_${orderId}`;
+      if (recentProcessedEvents.has(eventKey)) {
+        if (typeof callback === 'function') {
+          callback({ success: true, orderId, ignored: true });
+        }
+        return;
+      }
+      recentProcessedEvents.add(eventKey);
+      setTimeout(() => recentProcessedEvents.delete(eventKey), 3000);
 
   // تحديد نوع النطاق بناءً على مصدر الطلب أو خصائصه
       let source = orderData.orderSource || 'cashier';
@@ -1333,6 +1344,12 @@
 
       if (!orderId) return;
 
+      // 🛡️ منع تكرار معالجة نفس حالة الطلب السريعة
+      const eventKey = `status_${orderId}_${status}`;
+      if (recentProcessedEvents.has(eventKey)) return;
+      recentProcessedEvents.add(eventKey);
+      setTimeout(() => recentProcessedEvents.delete(eventKey), 3000);
+
       const orderIndex = serverActiveOrders.findIndex(
         (o) => getKitchenOrderId(o) === orderId
       );
@@ -1407,6 +1424,12 @@
       );
 
       if (!orderId) return;
+
+      // 🛡️ منع تكرار معالجة التسليم الفوري
+      const eventKey = `delivered_${orderId}`;
+      if (recentProcessedEvents.has(eventKey)) return;
+      recentProcessedEvents.add(eventKey);
+      setTimeout(() => recentProcessedEvents.delete(eventKey), 3000);
 
       console.log(
         `🛵 [تسليم نهائي] تم تسليم طلب الدليفري #${orderId} للزبون بنجاح ولن يتم تكراره.`
@@ -1484,6 +1507,12 @@
         );
         return;
       }
+
+      // 🛡️ منع تكرار إرسال نفس الطلب للمطبخ سريعاً
+      const eventKey = `kitchen_${orderId}`;
+      if (recentProcessedEvents.has(eventKey)) return;
+      recentProcessedEvents.add(eventKey);
+      setTimeout(() => recentProcessedEvents.delete(eventKey), 3000);
 
       const normalizedOrder = {
         ...orderData,
