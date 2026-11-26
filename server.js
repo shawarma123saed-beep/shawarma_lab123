@@ -1,960 +1,970 @@
-const express = require('express');
-const http = require('http');
-const https = require('https');
-const { Server } = require('socket.io');
-const fs = require('fs');
-const path = require('path');
-const cors = require('cors');
+  const express = require('express');
+  const http = require('http');
+  const https = require('https');
+  const { Server } = require('socket.io');
+  const fs = require('fs');
+  const path = require('path');
+  const cors = require('cors');
 
-// 🛡️ حماية السيرفر من الانهيار المفاجئ واستمرار العمل بأقصى كفاءة دون فصل
-process.on('uncaughtException', (err) => {
-  console.error('⚠️ خطأ غير متوقع تم احتواؤه لمنع توقف السيرفر:', err.message);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('⚠️ رفض وعد غير معالج تم احتواؤه بنجاح:', reason);
-});
-
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: '20mb' }));
-
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: { origin: "*" },
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  upgradeTimeout: 30000,
-  maxHttpBufferSize: 1e8
-});
-
-// ==================== 🚀 مسار جذري لمنع خطأ 502 والاستجابة للمنصة ==================== //
-
-app.get('/', (req, res) => {
-  res.send('🚀 Shawarma Lab Server is Running Successfully!');
-});
-
-// ==================== 📁 مسارات حفظ البيانات ==================== //
-
-// استخدم مسار الـ Railway Volume عند ضبط DATA_DIR، أو /data تلقائياً إذا كان موجوداً.
-const legacyDataDir = path.join(__dirname, 'data');
-const dataDir = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : (fs.existsSync('/data') ? '/data' : legacyDataDir);
-
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
-// نقل بيانات الموظفين القديمة إلى الـ Volume مرة واحدة فقط، دون استبدال أي ملف موجود فيه.
-if (path.resolve(dataDir) !== path.resolve(legacyDataDir)) {
-  for (const fileName of ['employees.json', 'advances.json', 'leaves.json', 'active_orders.json']) {
-    const oldFile = path.join(legacyDataDir, fileName);
-    const newFile = path.join(dataDir, fileName);
-    if (fs.existsSync(oldFile) && !fs.existsSync(newFile)) {
-      try {
-        fs.copyFileSync(oldFile, newFile, fs.constants.COPYFILE_EXCL);
-        console.log(`📦 تم نقل بيانات ${fileName} القديمة إلى مجلد التخزين الدائم`);
-      } catch (error) {
-        console.error(`⚠️ تعذر نقل ${fileName} إلى مجلد التخزين الدائم:`, error.message);
-      }
-    }
-  }
-}
-
-console.log('📁 مسار تخزين البيانات الفعلي:', dataDir);
-
-const menuFile = path.join(dataDir, 'menu.json');
-const invoicesFile = path.join(dataDir, 'invoices.json');
-const cancelledFile = path.join(dataDir, 'cancelled_orders.json');
-const employeesFile = path.join(dataDir, 'employees.json');
-const advancesFile = path.join(dataDir, 'advances.json');
-const leavesFile = path.join(dataDir, 'leaves.json'); // 🌟 ملف الإجازات الجديد
-const ratingsFile = path.join(dataDir, 'ratings.json');
-const reportsFile = path.join(dataDir, 'daily_reports.json');
-const kitchenOrdersFile = path.join(dataDir, 'kitchen_orders.json');
-const counterFile = path.join(dataDir, 'order_counter.json'); // 🔢 ملف عداد الفواتير التسلسلي
-const activeOrdersFile = path.join(dataDir, 'active_orders.json'); // 🌟 ملف تخزين الطلبات النشطة لحمايتها من انقطاع الكهرباء
-
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-  console.log('📁 تم إنشاء مجلد البيانات بنجاح:', dataDir);
-}
-
-// ==================== 🕒 دالة التوقيت المحلي الدقيق لحظة وصوله للسيرفر ==================== //
-const getLocalDateTimeString = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const hours = String(now.getHours()).padStart(2, '0');
-  const minutes = String(now.getMinutes()).padStart(2, '0');
-  const seconds = String(now.getSeconds()).padStart(2, '0');
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-};
-
-// ==================== 💱 سعر الصرف ==================== //
-
-let currentExchangeRate = 15000.0;
-
-const fetchExchangeRateFromServer = () => {
-  https.get('https://liranews.info/api/public/v1/price/usdsypd', {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json, text/plain, */*'
-    }
-  }, (res) => {
-    let data = '';
-
-    res.on('data', (chunk) => {
-      data += chunk;
-    });
-
-    res.on('end', () => {
-      try {
-        if (data.trim().startsWith('<') || res.statusCode !== 200) {
-          console.error('⚠️ الرابط أرجع HTML أو خطأ');
-          return;
-        }
-
-        const parsedData = JSON.parse(data);
-
-        const liveRate = parseFloat(
-          parsedData?.usdsypd?.sell ||
-          parsedData?.usdsypd?.value ||
-          parsedData?.sell ||
-          parsedData?.value ||
-          parsedData?.price ||
-          parsedData?.data?.sell
-        );
-
-        if (!isNaN(liveRate) && liveRate > 0) {
-          currentExchangeRate = liveRate;
-
-          console.log(
-            '💱 تم تحديث سعر الصرف:',
-            currentExchangeRate
-          );
-
-          io.emit('exchange_rate_updated', {
-            exchangeRate: currentExchangeRate
-          });
-        }
-      } catch (e) {
-        console.error('⚠️ خطأ في تحليل سعر الصرف:', e.message);
-      }
-    });
-  }).on('error', (err) => {
-    console.error(
-      '⚠️ تعذر جلب سعر الصرف، الاحتفاظ بالسعر الحالي:',
-      currentExchangeRate
-    );
-  });
-};
-
-fetchExchangeRateFromServer();
-setInterval(fetchExchangeRateFromServer, 15 * 60 * 1000);
-
-// ==================== 📂 قراءة وكتابة JSON ==================== //
-
-const readJsonFile = (filePath) => {
-  try {
-    if (fs.existsSync(filePath)) {
-      const data = fs.readFileSync(filePath, 'utf8');
-
-      if (data.trim() === '') return [];
-
-      const parsed = JSON.parse(data);
-
-      if (Array.isArray(parsed)) return parsed;
-
-      if (parsed && typeof parsed === 'object') {
-        return [parsed];
-      }
-    }
-  } catch (e) {
-    console.error(
-      '❌ خطأ في قراءة الملف:',
-      filePath,
-      e.message
-    );
-  }
-
-  return [];
-};
-
-const writeJsonFile = (filePath, data) => {
-  const tempFile = `${filePath}.tmp`;
-
-  try {
-    if (data === undefined) {
-      console.warn(
-        '⚠️ محاولة كتابة بيانات undefined:',
-        filePath
-      );
-      return false;
-    }
-
-    const jsonData = typeof data === 'string'
-      ? data
-      : JSON.stringify(data, null, 2);
-
-    if (jsonData === undefined) {
-      return false;
-    }
-
-    fs.writeFileSync(tempFile, jsonData, 'utf8');
-    fs.renameSync(tempFile, filePath);
-
-    return true;
-
-  } catch (e) {
-    console.error(
-      '❌ خطأ في كتابة الملف:',
-      filePath,
-      e.message
-    );
-
-    try {
-      if (fs.existsSync(tempFile)) {
-        fs.unlinkSync(tempFile);
-      }
-    } catch (_) {}
-
-    return false;
-  }
-};
-
-// ==================== 📦 الطلبات النشطة واسترجاعها التلقائي من التخزين الدائم ==================== //
-
-let serverActiveOrders = readJsonFile(activeOrdersFile);
-let kitchenOrders = [];
-
-const saveActiveOrders = () => {
-  writeJsonFile(activeOrdersFile, serverActiveOrders);
-};
-
-// ==================== 🔢 نظام العدادات النطاقية المنفصلة ==================== //
-const getNextRangeInvoiceNumber = (orderType) => {
-  let counterData = { customerLast: 0, cashierLast: 2000, deliveryLast: 4000 };
-  
-  try {
-    if (fs.existsSync(counterFile)) {
-      const content = JSON.parse(fs.readFileSync(counterFile, 'utf8'));
-      counterData.customerLast = parseInt(content.customerLast, 10) || 0;
-      counterData.cashierLast = parseInt(content.cashierLast, 10) || 2000;
-      counterData.deliveryLast = parseInt(content.deliveryLast, 10) || 4000;
-    }
-  } catch (e) {
-    // القيم الافتراضية عند الخطأ
-  }
-
-  let assignedNumber = 1;
-
-  if (orderType === 'customer') {
-    // 📱 تطبيق الزبون الداخلي: من 1 إلى 2000 (يعود إلى 1 عند التجاوز)
-    counterData.customerLast++;
-    if (counterData.customerLast > 2000) counterData.customerLast = 1; 
-    assignedNumber = counterData.customerLast;
-  } 
-  else if (orderType === 'cashier') {
-    // 🖨️ الكاشير والطلب المباشر: من 2001 إلى 4000 (يعود إلى 2001 عند التجاوز)
-    counterData.cashierLast++;
-    if (counterData.cashierLast > 4000) counterData.cashierLast = 2001; 
-    assignedNumber = counterData.cashierLast;
-  } 
-  else if (orderType === 'delivery') {
-    // 🛵 الدليفري: من 4001 إلى 6000 (يعود إلى 4001 عند التجاوز)
-    counterData.deliveryLast++;
-    if (counterData.deliveryLast > 6000) counterData.deliveryLast = 4001; 
-    assignedNumber = counterData.deliveryLast;
-  }
-
-  writeJsonFile(counterFile, counterData);
-  return assignedNumber;
-};
-
-// ==================== 🟢 منع تكرار إشعارات الجهوزية ==================== //
-
-const readyNotifiedOrders = new Set();
-
-const normalizeOrderId = (id) => {
-  if (id === undefined || id === null || id === '') {
-    return null;
-  }
-
-  return String(id);
-};
-
-// ==================== 📦 أرشفة الفواتير للمدير مع حماية دائمة لطلبات الكاشير وعدم حذفها ==================== //
-const checkAndArchiveCompletedOrders = () => {
-  // فحص الطلبات التي انتهت كلياً وتم إنجازها/تسليمها
-  const finishedOrders = serverActiveOrders.filter(o => {
-    const status = String(o.status || '').toLowerCase();
-    return ['delivered', 'completed', 'paid', 'ready'].includes(status);
+  // 🛡️ حماية السيرفر من الانهيار المفاجئ واستمرار العمل بأقصى كفاءة دون فصل
+  process.on('uncaughtException', (err) => {
+    console.error('⚠️ خطأ غير متوقع تم احتواؤه لمنع توقف السيرفر:', err.message);
   });
 
-  if (finishedOrders.length > 0) {
-    let invoices = readJsonFile(invoicesFile);
-    let hasNewInvoices = false;
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ رفض وعد غير معالج تم احتواؤه بنجاح:', reason);
+  });
 
-    finishedOrders.forEach(order => {
-      const orderId = normalizeOrderId(order.id ?? order.orderId);
-      if (!orderId) return;
+  const app = express();
+  app.use(cors());
+  app.use(express.json({ limit: '20mb' }));
 
-      const exists = invoices.some(inv => normalizeOrderId(inv.orderId || inv.id) === orderId);
-      if (!exists) {
-        const exactServerTime = getLocalDateTimeString();
-        invoices.push({
-          ...order,
-          createdAt: order.createdAt || exactServerTime,
-          archivedAt: exactServerTime,
-          archiveReason: 'Archived finished order for manager record'
-        });
-        hasNewInvoices = true;
+  const server = http.createServer(app);
+
+  const io = new Server(server, {
+    cors: { origin: "*" },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 1e8
+  });
+
+  // ==================== 🚀 مسار جذري لمنع خطأ 502 والاستجابة للمنصة ==================== //
+
+  app.get('/', (req, res) => {
+    res.send('🚀 Shawarma Lab Server is Running Successfully!');
+  });
+
+  // ==================== 📁 مسارات حفظ البيانات ==================== //
+
+  // استخدم مسار الـ Railway Volume عند ضبط DATA_DIR، أو /data تلقائياً إذا كان موجوداً.
+  const legacyDataDir = path.join(__dirname, 'data');
+  const dataDir = process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : (fs.existsSync('/data') ? '/data' : legacyDataDir);
+
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  // نقل بيانات الموظفين القديمة إلى الـ Volume مرة واحدة فقط، دون استبدال أي ملف موجود فيه.
+  if (path.resolve(dataDir) !== path.resolve(legacyDataDir)) {
+    for (const fileName of ['employees.json', 'advances.json', 'leaves.json', 'active_orders.json']) {
+      const oldFile = path.join(legacyDataDir, fileName);
+      const newFile = path.join(dataDir, fileName);
+      if (fs.existsSync(oldFile) && !fs.existsSync(newFile)) {
+        try {
+          fs.copyFileSync(oldFile, newFile, fs.constants.COPYFILE_EXCL);
+          console.log(`📦 تم نقل بيانات ${fileName} القديمة إلى مجلد التخزين الدائم`);
+        } catch (error) {
+          console.error(`⚠️ تعذر نقل ${fileName} إلى مجلد التخزين الدائم:`, error.message);
+        }
       }
-    });
-
-    // حفظ الفواتير المؤرشفة لدى المدير مع الإبقاء على كافة الطلبات في شاشة الكاشير حتى إغلاق الصندوق
-    if (hasNewInvoices) {
-      writeJsonFile(invoicesFile, invoices);
-      io.emit('update_admin_invoices', invoices);
-    }
-  }
-};
-
-// ==================== 🟢 تهيئة الملفات (مع الحفاظ على البيانات الموجودة وعدم تصفيرها) ==================== //
-
-const initializeJsonFile = (filePath) => {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify([], null, 2),
-      'utf8'
-    );
-    console.log('📄 تم إنشاء الملف الافتراضي:', path.basename(filePath));
-  } else {
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      if (content.trim() === '') {
-        fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
-      }
-    } catch (e) {
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
-    }
-  }
-};
-
-[
-  menuFile,
-  invoicesFile,
-  cancelledFile,
-  employeesFile,
-  advancesFile,
-  leavesFile, // 🌟 ملف الإجازات الجديد
-  ratingsFile,
-  reportsFile,
-  kitchenOrdersFile,
-  activeOrdersFile
-].forEach(initializeJsonFile);
-
-// تهيئة ملف العداد بالنطاقات المخصصة في حال لم يكن موجوداً
-if (!fs.existsSync(counterFile)) {
-  fs.writeFileSync(counterFile, JSON.stringify({ customerLast: 0, cashierLast: 2000, deliveryLast: 4000 }, null, 2), 'utf8');
-}
-
-// ==================== 👥 معالجة قوائم الموظفين والسلف والإجازات ==================== //
-
-const normalizeListPayload = (payload, possibleKeys = []) => {
-  let target = payload;
-  if (Array.isArray(payload) && payload.length === 1 && (Array.isArray(payload[0]) || (payload[0] && typeof payload[0] === 'object'))) {
-    target = payload[0];
-  }
-
-  if (Array.isArray(target)) {
-    return target;
-  }
-
-  if (!target || typeof target !== 'object') {
-    throw new Error('البيانات المرسلة ليست قائمة أو كائناً صالحاً');
-  }
-
-  for (const key of possibleKeys) {
-    if (Array.isArray(target[key])) {
-      return target[key];
     }
   }
 
-  if (Array.isArray(target.data)) {
-    return target.data;
+  console.log('📁 مسار تخزين البيانات الفعلي:', dataDir);
+
+  const menuFile = path.join(dataDir, 'menu.json');
+  const invoicesFile = path.join(dataDir, 'invoices.json');
+  const cancelledFile = path.join(dataDir, 'cancelled_orders.json');
+  const employeesFile = path.join(dataDir, 'employees.json');
+  const advancesFile = path.join(dataDir, 'advances.json');
+  const leavesFile = path.join(dataDir, 'leaves.json'); // 🌟 ملف الإجازات الجديد
+  const ratingsFile = path.join(dataDir, 'ratings.json');
+  const reportsFile = path.join(dataDir, 'daily_reports.json');
+  const kitchenOrdersFile = path.join(dataDir, 'kitchen_orders.json');
+  const activeOrdersFile = path.join(dataDir, 'active_orders.json'); // 🌟 ملف تخزين الطلبات النشطة لحمايتها من انقطاع الكهرباء
+
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    console.log('📁 تم إنشاء مجلد البيانات بنجاح:', dataDir);
   }
 
-  if (Array.isArray(target.list)) {
-    return target.list;
-  }
-
-  // إذا كان الكائن نفسه عنصراً واحداً صالحاً
-  if (target.id !== undefined && target.id !== null) {
-    return [target];
-  }
-
-  throw new Error('لم يتم العثور على قائمة بيانات داخل الإرسال');
-};
-
-const validateDataList = (list, listName) => {
-  if (!Array.isArray(list)) {
-    throw new Error(`قائمة ${listName} غير صالحة`);
-  }
-
-  for (let i = 0; i < list.length; i++) {
-    const item = list[i];
-
-    if (
-      item === null ||
-      typeof item !== 'object' ||
-      Array.isArray(item)
-    ) {
-      throw new Error(
-        `العنصر رقم ${i + 1} في قائمة ${listName} غير صالح`
-      );
-    }
-  }
-
-  return true;
-};
-
-const saveDataList = (filePath, incomingList, listName) => {
-  validateDataList(incomingList, listName);
-
-  const saved = writeJsonFile(filePath, incomingList);
-
-  if (!saved) {
-    throw new Error(`فشل حفظ قائمة ${listName} على القرص`);
-  }
-
-  const savedList = readJsonFile(filePath);
-
-  // تم إزالة شرط مطابقة العدد الصارم الذي كان يتسبب أحياناً باعتراض الحفظ إذا واجه اختلافاً بسيطاً
-  if (!Array.isArray(savedList)) {
-    throw new Error(
-      `فشل استرجاع قائمة ${listName} بعد الحفظ`
-    );
-  }
-
-  return savedList;
-};
-
-// ==================== 🍳 إدارة طلبات المطبخ ==================== //
-
-const getKitchenOrderId = (order) => {
-  if (!order || typeof order !== 'object') return null;
-
-  const id = order.id ?? order.orderId;
-
-  return normalizeOrderId(id);
-};
-
-const isFinalKitchenStatus = (status) => {
-  const finalStatuses = [
-    'ready',
-    'completed',
-    'delivered',
-    'paid',
-    'cancelled'
-  ];
-
-  return finalStatuses.includes(
-    String(status || '').toLowerCase()
-  );
-};
-
-const saveKitchenOrders = () => {
-  const saved = writeJsonFile(kitchenOrdersFile, kitchenOrders);
-
-  if (saved) {
-    console.log(
-      `💾 تم حفظ طلبات المطبخ. العدد: ${kitchenOrders.length}`
-    );
-  }
-
-  return saved;
-};
-
-const upsertKitchenOrder = (orderData) => {
-  if (!orderData || typeof orderData !== 'object') {
-    console.warn('⚠️ طلب مطبخ غير صالح');
-    return false;
-  }
-
-  const orderId = getKitchenOrderId(orderData);
-
-  if (!orderId) {
-    console.warn('⚠️ طلب المطبخ لا يحتوي على id أو orderId');
-    return false;
-  }
-
-  const existingIndex = kitchenOrders.findIndex(
-    (order) => getKitchenOrderId(order) === orderId
-  );
-
-  if (existingIndex !== -1) {
-    kitchenOrders[existingIndex] = {
-      ...kitchenOrders[existingIndex],
-      ...orderData
-    };
-  } else {
-    kitchenOrders.push(orderData);
-  }
-
-  return saveKitchenOrders();
-};
-
-const removeKitchenOrder = (orderId) => {
-  if (orderId === undefined || orderId === null) {
-    return false;
-  }
-
-  const normalizedId = String(orderId);
-
-  const oldLength = kitchenOrders.length;
-
-  kitchenOrders = kitchenOrders.filter(
-    (order) => getKitchenOrderId(order) !== normalizedId
-  );
-
-  if (kitchenOrders.length !== oldLength) {
-    saveKitchenOrders();
-
-    console.log(
-      `🗑️ تم حذف الطلب #${normalizedId} من المطبخ`
-    );
-
-    return true;
-  }
-
-  return false;
-};
-
-const loadKitchenOrders = () => {
-  try {
-    kitchenOrders = readJsonFile(kitchenOrdersFile);
-
-    const uniqueOrders = new Map();
-
-    kitchenOrders.forEach((order) => {
-      const orderId = getKitchenOrderId(order);
-
-      if (!orderId) return;
-
-      if (isFinalKitchenStatus(order.status)) return;
-
-      uniqueOrders.set(orderId, order);
-    });
-
-    kitchenOrders = Array.from(uniqueOrders.values());
-
-    saveKitchenOrders();
-
-    console.log(
-      `🍳 تم استرجاع ${kitchenOrders.length} طلب من المطبخ`
-    );
-
-  } catch (e) {
-    console.error('❌ خطأ في تحميل طلبات المطبخ:', e);
-    kitchenOrders = [];
-  }
-};
-
-loadKitchenOrders();
-
-// ==================== 🔔 إرسال إشعار جهوزية موحد ==================== //
-
-const notifyOrderReady = (orderData) => {
-  if (!orderData || typeof orderData !== 'object') {
-    return false;
-  }
-
-  const orderId = normalizeOrderId(
-    orderData.id ?? orderData.orderId
-  );
-
-  if (!orderId) {
-    console.warn('⚠️ تعذر إرسال إشعار الجهوزية: رقم الطلب مفقود');
-    return false;
-  }
-
-  const activeOrder = serverActiveOrders.find(
-    (order) => getKitchenOrderId(order) === orderId
-  );
-
-  const kitchenOrder = kitchenOrders.find(
-    (order) => getKitchenOrderId(order) === orderId
-  );
-
-  const readyPayload = {
-    ...(activeOrder || {}),
-    ...(kitchenOrder || {}),
-    ...orderData,
-    id: orderId,
-    orderId: orderId,
-    status: 'ready'
+  // ==================== 🕒 دالة التوقيت المحلي الدقيق لحظة وصوله للسيرفر ==================== //
+  const getLocalDateTimeString = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   };
 
-  // 🛵 إرسال طلب الدليفري الجاهز حصرياً للسائقين عند إعلان المطبخ أنه جاهز (بث لحظي)
-  if (readyPayload.isDelivery === true) {
-    io.emit('driver_new_order', readyPayload);
-    console.log(`🛵 تم إرسال طلب الدليفري الجاهز #${orderId} بكل تفاصيله لشاشة السائقين بنجاح`);
-  }
+  // ==================== 💱 سعر الصرف ==================== //
 
-  const isFromCashier = 
-    readyPayload.fromCustomerApp !== true && 
-    (readyPayload.fromCashier === true || 
-     readyPayload.isCashierOrder === true ||
-     readyPayload.isDirectOrder === true ||
-     readyPayload.orderType === 'direct' ||
-     String(readyPayload.tableNumber || '').includes('كاشير') ||
-     String(readyPayload.tableNumber || '').includes('طلب مباشر') ||
-     String(readyPayload.tableNumber || '').includes('سفري') ||
-     !activeOrder?.fromCustomerApp);
+  let currentExchangeRate = 15000.0;
 
-  if (isFromCashier) {
-    console.log(`ℹ️ الطلب #${orderId} منشأ من الكاشير، لن يتم إرسال إشعار النغمة أبداً.`);
-    return false;
-  }
+  const fetchExchangeRateFromServer = () => {
+    https.get('https://liranews.info/api/public/v1/price/usdsypd', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*'
+      }
+    }, (res) => {
+      let data = '';
 
-  if (readyNotifiedOrders.has(orderId)) {
-    console.log(
-      `🔁 تم منع تكرار إشعار الجهوزية للطلب #${orderId}`
-    );
-    return false;
-  }
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
 
-  readyNotifiedOrders.add(orderId);
+      res.on('end', () => {
+        try {
+          if (data.trim().startsWith('<') || res.statusCode !== 200) {
+            console.error('⚠️ الرابط أرجع HTML أو خطأ');
+            return;
+          }
 
-  const activeIndex = serverActiveOrders.findIndex(
-    (order) => getKitchenOrderId(order) === orderId
-  );
+          const parsedData = JSON.parse(data);
 
-  if (activeIndex !== -1) {
-    serverActiveOrders[activeIndex] = {
-      ...serverActiveOrders[activeIndex],
-      ...readyPayload,
-      status: 'ready'
-    };
-    saveActiveOrders(); // 💾 حفظ التحديث المستمر
-  }
+          const liveRate = parseFloat(
+            parsedData?.usdsypd?.sell ||
+            parsedData?.usdsypd?.value ||
+            parsedData?.sell ||
+            parsedData?.value ||
+            parsedData?.price ||
+            parsedData?.data?.sell
+          );
 
-  io.emit('order_ready_for_customer', readyPayload);
+          if (!isNaN(liveRate) && liveRate > 0) {
+            currentExchangeRate = liveRate;
 
-  console.log(
-    `🔔 تم إرسال إشعار جهوزية الطلب #${orderId} للزبون بنجاح`
-  );
+            console.log(
+              '💱 تم تحديث سعر الصرف:',
+              currentExchangeRate
+            );
 
-  return true;
-};
+            io.emit('exchange_rate_updated', {
+              exchangeRate: currentExchangeRate
+            });
+          }
+        } catch (e) {
+          console.error('⚠️ خطأ في تحليل سعر الصرف:', e.message);
+        }
+      });
+    }).on('error', (err) => {
+      console.error(
+        '⚠️ تعذر جلب سعر الصرف، الاحتفاظ بالسعر الحالي:',
+        currentExchangeRate
+      );
+    });
+  };
 
-// ==================== 🍽️ قائمة الطعام (تعديل جذري لضمان ثبات الترتيب والأسعار) ==================== //
+  fetchExchangeRateFromServer();
+  setInterval(fetchExchangeRateFromServer, 15 * 60 * 1000);
 
-const getMenuData = () => readJsonFile(menuFile);
+  // ==================== 📂 قراءة وكتابة JSON ==================== //
 
-const saveAndBroadcastMenu = (newMenu) => {
-  try {
-    if (!Array.isArray(newMenu)) {
-      console.error('❌ رفض حفظ المنيو: البيانات ليست مصفوفة');
-      return false;
+  const readJsonFile = (filePath) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        const data = fs.readFileSync(filePath, 'utf8');
+
+        if (data.trim() === '') return [];
+
+        const parsed = JSON.parse(data);
+
+        if (Array.isArray(parsed)) return parsed;
+
+        if (parsed && typeof parsed === 'object') {
+          return [parsed];
+        }
+      }
+    } catch (e) {
+      console.error(
+        '❌ خطأ في قراءة الملف:',
+        filePath,
+        e.message
+      );
     }
 
-    // نقبل المصفوفة الفارغة عمداً، ونحافظ على ترتيب العناصر كما وصل من شاشة الإدارة.
-    // نرفض العناصر غير الصالحة حتى لا نستبدل قائمة سليمة ببيانات تالفة.
-    const validMenu = newMenu.every(
-      (item) => item && typeof item === 'object' && !Array.isArray(item)
-    );
+    return [];
+  };
 
-    if (!validMenu) {
-      console.error('❌ رفض حفظ المنيو: يوجد عنصر غير صالح داخل القائمة');
+  const writeJsonFile = (filePath, data) => {
+    const tempFile = `${filePath}.tmp`;
+
+    try {
+      if (data === undefined) {
+        console.warn(
+          '⚠️ محاولة كتابة بيانات undefined:',
+          filePath
+        );
+        return false;
+      }
+
+      const jsonData = typeof data === 'string'
+        ? data
+        : JSON.stringify(data, null, 2);
+
+      if (jsonData === undefined) {
+        return false;
+      }
+
+      fs.writeFileSync(tempFile, jsonData, 'utf8');
+      fs.renameSync(tempFile, filePath);
+
+      return true;
+
+    } catch (e) {
+      console.error(
+        '❌ خطأ في كتابة الملف:',
+        filePath,
+        e.message
+      );
+
+      try {
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+      } catch (_) {}
+
       return false;
     }
+  };
 
-    const menuSnapshot = JSON.parse(JSON.stringify(newMenu));
-    const saved = writeJsonFile(menuFile, menuSnapshot);
+  // ==================== 📦 الطلبات النشطة واسترجاعها التلقائي من التخزين الدائم ==================== //
 
-    if (!saved) {
-      console.error('❌ فشل حفظ قائمة الطعام على القرص');
-      return false;
+  let serverActiveOrders = readJsonFile(activeOrdersFile);
+  let kitchenOrders = [];
+
+  const saveActiveOrders = () => {
+    writeJsonFile(activeOrdersFile, serverActiveOrders);
+  };
+
+  // ==================== 🟢 منع تكرار إشعارات الجهوزية ==================== //
+
+  const readyNotifiedOrders = new Set();
+
+  const normalizeOrderId = (id) => {
+    if (id === undefined || id === null || id === '') {
+      return null;
     }
 
-    // نقرأ الملف بعد الكتابة، حتى يكون البث مطابقاً لما تم تخزينه فعلياً.
-    const persistedMenu = getMenuData();
+    return String(id);
+  };
 
-    console.log(
-      '💾 تم حفظ قائمة الطعام والترتيب والأسعار بنجاح. العدد:',
-      persistedMenu.length,
-      '| الملف:',
-      menuFile
-    );
+  // ==================== 📦 أرشفة الفواتير للمدير (مع حماية تامة ضد تكرارها وعودتها) ==================== //
+  const checkAndArchiveCompletedOrders = () => {
+    // فحص الطلبات التي انتهت كلياً ولم يتم أرشففتها من قبل
+    const finishedOrders = serverActiveOrders.filter(o => {
+      const status = String(o.status || '').toLowerCase();
+      return ['delivered', 'completed', 'paid', 'ready'].includes(status) && !o.isArchived;
+    });
 
-    // الحفاظ على أسماء الأحداث الحالية حتى لا تتأثر التطبيقات الأخرى.
-    io.emit('admin_menu_updated', persistedMenu);
-    io.emit('initial_menu_data', persistedMenu);
-    io.emit('menu_data', persistedMenu);
+    if (finishedOrders.length > 0) {
+      let invoices = readJsonFile(invoicesFile);
+      let hasNewInvoices = false;
+
+      finishedOrders.forEach(order => {
+        const orderId = normalizeOrderId(order.id ?? order.orderId);
+        if (!orderId) return;
+
+        const exists = invoices.some(inv => normalizeOrderId(inv.orderId || inv.id) === orderId);
+        if (!exists) {
+          const exactServerTime = order.createdAt || getLocalDateTimeString();
+          invoices.push({
+            ...order,
+            createdAt: order.createdAt || exactServerTime,
+            receivedAt: order.createdAt || exactServerTime, // تثبيت وقت السيرفر الحقيقي
+            archivedAt: exactServerTime,
+            archiveReason: 'Archived finished order for manager record'
+          });
+          order.isArchived = true; // 🛡️ تعليم الطلب بأنه أُرشف لئلا يعود مجدداً
+          hasNewInvoices = true;
+        }
+      });
+
+      // حفظ الفواتير المؤرشفة لدى المدير وحفظ حالة أرشفة الطلبات النشطة
+      if (hasNewInvoices) {
+        writeJsonFile(invoicesFile, invoices);
+        saveActiveOrders();
+        io.emit('update_admin_invoices', invoices);
+      }
+    }
+  };
+
+  // ==================== 🟢 تهيئة الملفات (مع الحفاظ على البيانات الموجودة وعدم تصفيرها) ==================== //
+
+  const initializeJsonFile = (filePath) => {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(
+        filePath,
+        JSON.stringify([], null, 2),
+        'utf8'
+      );
+      console.log('📄 تم إنشاء الملف الافتراضي:', path.basename(filePath));
+    } else {
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        if (content.trim() === '') {
+          fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
+        }
+      } catch (e) {
+        fs.writeFileSync(filePath, JSON.stringify([], null, 2), 'utf8');
+      }
+    }
+  };
+
+  [
+    menuFile,
+    invoicesFile,
+    cancelledFile,
+    employeesFile,
+    advancesFile,
+    leavesFile, // 🌟 ملف الإجازات الجديد
+    ratingsFile,
+    reportsFile,
+    kitchenOrdersFile,
+    activeOrdersFile
+  ].forEach(initializeJsonFile);
+
+  // ==================== 👥 معالجة قوائم الموظفين والسلف والإجازات ==================== //
+
+  const normalizeListPayload = (payload, possibleKeys = []) => {
+    let target = payload;
+    if (Array.isArray(payload) && payload.length === 1 && (Array.isArray(payload[0]) || (payload[0] && typeof payload[0] === 'object'))) {
+      target = payload[0];
+    }
+
+    if (Array.isArray(target)) {
+      return target;
+    }
+
+    if (!target || typeof target !== 'object') {
+      throw new Error('البيانات المرسلة ليست قائمة أو كائناً صالحاً');
+    }
+
+    for (const key of possibleKeys) {
+      if (Array.isArray(target[key])) {
+        return target[key];
+      }
+    }
+
+    if (Array.isArray(target.data)) {
+      return target.data;
+    }
+
+    if (Array.isArray(target.list)) {
+      return target.list;
+    }
+
+    // إذا كان الكائن نفسه عنصراً واحداً صالحاً
+    if (target.id !== undefined && target.id !== null) {
+      return [target];
+    }
+
+    throw new Error('لم يتم العثور على قائمة بيانات داخل الإرسال');
+  };
+
+  const validateDataList = (list, listName) => {
+    if (!Array.isArray(list)) {
+      throw new Error(`قائمة ${listName} غير صالحة`);
+    }
+
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+
+      if (
+        item === null ||
+        typeof item !== 'object' ||
+        Array.isArray(item)
+      ) {
+        throw new Error(
+          `العنصر رقم ${i + 1} في قائمة ${listName} غير صالح`
+        );
+      }
+    }
 
     return true;
-  } catch (e) {
-    console.error('خطأ في حفظ قائمة الطعام:', e);
-    return false;
-  }
-};
+  };
 
-// ==================== 🛠️ REST API ==================== //
+  const saveDataList = (filePath, incomingList, listName) => {
+    validateDataList(incomingList, listName);
 
-app.get('/api/menu', (req, res) => {
-  try {
-    res.json(getMenuData());
-  } catch (e) {
-    res.status(500).json({
-      error: 'فشل في جلب قائمة الطعام'
-    });
-  }
-});
+    const saved = writeJsonFile(filePath, incomingList);
 
-app.get('/api/invoices', (req, res) => {
-  try {
-    res.json(readJsonFile(invoicesFile));
-  } catch (e) {
-    res.status(500).json({
-      error: 'فشل في جلب الفواتير'
-    });
-  }
-});
-
-app.get('/api/employees', (req, res) => {
-  try {
-    res.json(readJsonFile(employeesFile));
-  } catch (e) {
-    res.status(500).json({
-      error: 'فشل في جلب الموظفين'
-    });
-  }
-});
-
-app.get('/api/advances', (req, res) => {
-  try {
-    res.json(readJsonFile(advancesFile));
-  } catch (e) {
-    res.status(500).json({
-      error: 'فشل في جلب السلف والدفعات'
-    });
-  }
-});
-
-app.get('/api/leaves', (req, res) => {
-  try {
-    res.json(readJsonFile(leavesFile));
-  } catch (e) {
-    res.status(500).json({
-      error: 'فشل في جلب الإجازات'
-    });
-  }
-});
-
-app.get('/api/exchange-rate', (req, res) => {
-  try {
-    res.json({
-      exchangeRate: currentExchangeRate
-    });
-  } catch (e) {
-    res.status(500).json({
-      error: 'فشل في جلب سعر الصرف'
-    });
-  }
-});
-
-// ==================== REST API تحديث المنيو (حفظ المصفوفة كاملة للترتيب) ==================== //
-
-app.post('/api/menu', (req, res) => {
-  try {
-    const body = req.body;
-
-    // شاشة الإدارة ترسل القائمة كاملة. لا ندمجها مع القائمة القديمة
-    // لأن الدمج يعيد الأصناف المحذوفة ويفسد الترتيب.
-    if (!Array.isArray(body)) {
-      return res.status(400).json({
-        success: false,
-        error: 'يجب إرسال قائمة الطعام كاملة بصيغة مصفوفة'
-      });
-    }
-
-    const saved = saveAndBroadcastMenu(body);
     if (!saved) {
-      return res.status(500).json({
-        success: false,
-        error: 'فشل حفظ قائمة الطعام على السيرفر'
-      });
+      throw new Error(`فشل حفظ قائمة ${listName} على القرص`);
     }
 
-    const persistedMenu = getMenuData();
-    return res.status(200).json({
-      success: true,
-      menu: persistedMenu,
-      count: persistedMenu.length
-    });
-  } catch (e) {
-    console.error('❌ خطأ POST /api/menu:', e);
-    return res.status(500).json({
-      success: false,
-      error: 'فشل في تحديث قائمة الطعام'
-    });
-  }
-});
+    const savedList = readJsonFile(filePath);
 
-// ==================== ⏱️ مؤقتات المطبخ ==================== //
+    // تم إزالة شرط مطابقة العدد الصارم الذي كان يتسبب أحياناً باعتراض الحفظ إذا واجه اختلافاً بسيطاً
+    if (!Array.isArray(savedList)) {
+      throw new Error(
+        `فشل استرجاع قائمة ${listName} بعد الحفظ`
+      );
+    }
 
-const kitchenTimers = {};
+    return savedList;
+  };
 
-// ==================== ⚡ SOCKET.IO ==================== //
+  // ==================== 🍳 إدارة طلبات المطبخ ==================== //
 
-io.on('connection', (socket) => {
+  const getKitchenOrderId = (order) => {
+    if (!order || typeof order !== 'object') return null;
 
-  console.log('⚡ جهاز متصل جديد:', socket.id);
+    const id = order.id ?? order.orderId;
 
-  // ==================== إرسال البيانات الأولية ==================== //
+    return normalizeOrderId(id);
+  };
 
-  socket.emit('initial_menu_data', getMenuData());
-  socket.emit('menu_data', getMenuData());
+  const isFinalKitchenStatus = (status) => {
+    const finalStatuses = [
+      'ready',
+      'completed',
+      'delivered',
+      'paid',
+      'cancelled'
+    ];
 
-  socket.emit('initial_invoices', readJsonFile(invoicesFile));
-  socket.emit('initial_cancelled_orders', readJsonFile(cancelledFile));
+    return finalStatuses.includes(
+      String(status || '').toLowerCase()
+    );
+  };
 
-  socket.emit('initial_employees_data', readJsonFile(employeesFile));
-  socket.emit('initial_advances_data', readJsonFile(advancesFile));
-  socket.emit('initial_leaves_data', readJsonFile(leavesFile)); // 🌟 إرسال الإجازات الأولية
+  const saveKitchenOrders = () => {
+    const saved = writeJsonFile(kitchenOrdersFile, kitchenOrders);
 
-  socket.emit('initial_ratings_data', readJsonFile(ratingsFile));
-  socket.emit('initial_reports_data', readJsonFile(reportsFile));
+    if (saved) {
+      console.log(
+        `💾 تم حفظ طلبات المطبخ. العدد: ${kitchenOrders.length}`
+      );
+    }
 
-  socket.emit('exchange_rate_updated', {
-    exchangeRate: currentExchangeRate
-  });
+    return saved;
+  };
 
-  socket.emit('initial_kitchen_orders', kitchenOrders);
+  const upsertKitchenOrder = (orderData) => {
+    if (!orderData || typeof orderData !== 'object') {
+      console.warn('⚠️ طلب مطبخ غير صالح');
+      return false;
+    }
 
-  // ==================== 📦 طلبات الكاشير ==================== //
+    const orderId = getKitchenOrderId(orderData);
 
-  socket.on('get_active_orders', () => {
-    socket.emit('initial_orders', serverActiveOrders);
+    if (!orderId) {
+      console.warn('⚠️ طلب المطبخ لا يحتوي على id أو orderId');
+      return false;
+    }
+
+    const existingIndex = kitchenOrders.findIndex(
+      (order) => getKitchenOrderId(order) === orderId
+    );
+
+    if (existingIndex !== -1) {
+      kitchenOrders[existingIndex] = {
+        ...kitchenOrders[existingIndex],
+        ...orderData
+      };
+    } else {
+      kitchenOrders.push(orderData);
+    }
+
+    return saveKitchenOrders();
+  };
+
+  const removeKitchenOrder = (orderId) => {
+    if (orderId === undefined || orderId === null) {
+      return false;
+    }
+
+    const normalizedId = String(orderId);
+
+    const oldLength = kitchenOrders.length;
+
+    kitchenOrders = kitchenOrders.filter(
+      (order) => getKitchenOrderId(order) !== normalizedId
+    );
+
+    if (kitchenOrders.length !== oldLength) {
+      saveKitchenOrders();
+
+      console.log(
+        `🗑️ تم حذف الطلب #${normalizedId} من المطبخ`
+      );
+
+      return true;
+    }
+
+    return false;
+  };
+
+  const loadKitchenOrders = () => {
+    try {
+      kitchenOrders = readJsonFile(kitchenOrdersFile);
+
+      const uniqueOrders = new Map();
+
+      kitchenOrders.forEach((order) => {
+        const orderId = getKitchenOrderId(order);
+
+        if (!orderId) return;
+
+        if (isFinalKitchenStatus(order.status)) return;
+
+        uniqueOrders.set(orderId, order);
+      });
+
+      kitchenOrders = Array.from(uniqueOrders.values());
+
+      saveKitchenOrders();
+
+      console.log(
+        `🍳 تم استرجاع ${kitchenOrders.length} طلب من المطبخ`
+      );
+
+    } catch (e) {
+      console.error('❌ خطأ في تحميل طلبات المطبخ:', e);
+      kitchenOrders = [];
+    }
+  };
+
+  loadKitchenOrders();
+
+  // ==================== 🔔 إرسال إشعار جهوزية موحد ==================== //
+
+  const notifyOrderReady = (orderData) => {
+    if (!orderData || typeof orderData !== 'object') {
+      return false;
+    }
+
+    const orderId = normalizeOrderId(
+      orderData.id ?? orderData.orderId
+    );
+
+    if (!orderId) {
+      console.warn('⚠️ تعذر إرسال إشعار الجهوزية: رقم الطلب مفقود');
+      return false;
+    }
+
+    const activeOrder = serverActiveOrders.find(
+      (order) => getKitchenOrderId(order) === orderId
+    );
+
+    const kitchenOrder = kitchenOrders.find(
+      (order) => getKitchenOrderId(order) === orderId
+    );
+
+    const readyPayload = {
+      ...(activeOrder || {}),
+      ...(kitchenOrder || {}),
+      ...orderData,
+      id: orderId,
+      orderId: orderId,
+      status: 'ready'
+    };
+
+    // 🛵 إرسال طلب الدليفري الجاهز حصرياً للسائقين عند إعلان المطبخ أنه جاهز (بث لحظي)
+    if (readyPayload.isDelivery === true) {
+      io.emit('driver_new_order', readyPayload);
+      console.log(`🛵 تم إرسال طلب الدليفري الجاهز #${orderId} بكل تفاصيله لشاشة السائقين بنجاح`);
+    }
+
+    const isFromCashier = 
+      readyPayload.fromCustomerApp !== true && 
+      (readyPayload.fromCashier === true || 
+      readyPayload.isCashierOrder === true ||
+      readyPayload.isDirectOrder === true ||
+      readyPayload.orderType === 'direct' ||
+      String(readyPayload.tableNumber || '').includes('كاشير') ||
+      String(readyPayload.tableNumber || '').includes('طلب مباشر') ||
+      String(readyPayload.tableNumber || '').includes('سفري') ||
+      !activeOrder?.fromCustomerApp);
+
+    if (isFromCashier) {
+      console.log(`ℹ️ الطلب #${orderId} منشأ من الكاشير، لن يتم إرسال إشعار النغمة أبداً.`);
+      return false;
+    }
+
+    if (readyNotifiedOrders.has(orderId)) {
+      console.log(
+        `🔁 تم منع تكرار إشعار الجهوزية للطلب #${orderId}`
+      );
+      return false;
+    }
+
+    readyNotifiedOrders.add(orderId);
+
+    const activeIndex = serverActiveOrders.findIndex(
+      (order) => getKitchenOrderId(order) === orderId
+    );
+
+    if (activeIndex !== -1) {
+      serverActiveOrders[activeIndex] = {
+        ...serverActiveOrders[activeIndex],
+        ...readyPayload,
+        status: 'ready'
+      };
+      saveActiveOrders(); // 💾 حفظ التحديث المستمر
+    }
+
+    io.emit('order_ready_for_customer', readyPayload);
 
     console.log(
-      `📦 تم إرسال ${serverActiveOrders.length} طلب نشط للكاشير من التخزين الدائم`
+      `🔔 تم إرسال إشعار جهوزية الطلب #${orderId} للزبون بنجاح`
     );
+
+    return true;
+  };
+
+  // ==================== 🍽️ قائمة الطعام (تعديل جذري لضمان ثبات الترتيب والأسعار) ==================== //
+
+  const getMenuData = () => readJsonFile(menuFile);
+
+  const saveAndBroadcastMenu = (newMenu) => {
+    try {
+      if (!Array.isArray(newMenu)) {
+        console.error('❌ رفض حفظ المنيو: البيانات ليست مصفوفة');
+        return false;
+      }
+
+      // نقبل المصفوفة الفارغة عمداً، ونحافظ على ترتيب العناصر كما وصل من شاشة الإدارة.
+      // نرفض العناصر غير الصالحة حتى لا نستبدل قائمة سليمة ببيانات تالفة.
+      const validMenu = newMenu.every(
+        (item) => item && typeof item === 'object' && !Array.isArray(item)
+      );
+
+      if (!validMenu) {
+        console.error('❌ رفض حفظ المنيو: يوجد عنصر غير صالح داخل القائمة');
+        return false;
+      }
+
+      const menuSnapshot = JSON.parse(JSON.stringify(newMenu));
+      const saved = writeJsonFile(menuFile, menuSnapshot);
+
+      if (!saved) {
+        console.error('❌ فشل حفظ قائمة الطعام على القرص');
+        return false;
+      }
+
+      // نقرأ الملف بعد الكتابة، حتى يكون البث مطابقاً لما تم تخزينه فعلياً.
+      const persistedMenu = getMenuData();
+
+      console.log(
+        '💾 تم حفظ قائمة الطعام والترتيب والأسعار بنجاح. العدد:',
+        persistedMenu.length,
+        '| الملف:',
+        menuFile
+      );
+
+      // الحفاظ على أسماء الأحداث الحالية حتى لا تتأثر التطبيقات الأخرى.
+      io.emit('admin_menu_updated', persistedMenu);
+      io.emit('initial_menu_data', persistedMenu);
+      io.emit('menu_data', persistedMenu);
+
+      return true;
+    } catch (e) {
+      console.error('خطأ في حفظ قائمة الطعام:', e);
+      return false;
+    }
+  };
+
+  // ==================== 🛠️ REST API ==================== //
+
+  app.get('/api/menu', (req, res) => {
+    try {
+      res.json(getMenuData());
+    } catch (e) {
+      res.status(500).json({
+        error: 'فشل في جلب قائمة الطعام'
+      });
+    }
   });
 
-  socket.on('get_today_orders', () => {
-    socket.emit('initial_orders', serverActiveOrders);
-    console.log(`📦 تم إرسال سجل طلبات اليوم بالكامل للكاشير (${serverActiveOrders.length} طلب).`);
+  app.get('/api/invoices', (req, res) => {
+    try {
+      res.json(readJsonFile(invoicesFile));
+    } catch (e) {
+      res.status(500).json({
+        error: 'فشل في جلب الفواتير'
+      });
+    }
   });
 
-  // 🛵 جلب طلبات الدليفري الجاهزة فقط للسائق عند الاتصال
-  socket.on('get_driver_orders', () => {
-    const readyDeliveryOrders = serverActiveOrders.filter(
-      order => order.isDelivery === true && String(order.status || '').toLowerCase() === 'ready'
-    );
-    socket.emit('initial_orders', readyDeliveryOrders);
-    console.log(`🛵 تم إرسال ${readyDeliveryOrders.length} طلب دليفري جاهز للسائق`);
+  app.get('/api/employees', (req, res) => {
+    try {
+      res.json(readJsonFile(employeesFile));
+    } catch (e) {
+      res.status(500).json({
+        error: 'فشل في جلب الموظفين'
+      });
+    }
   });
 
-  // 🛑 حماية طلبات الكاشير: لا يتم تفريغ الطلبات إلا عند إغلاق الصندوق وإرسال التقرير اليومي فقط
-  socket.on('clear_server_active_orders', () => {
-    console.log('🛡️ تم منع تفريغ طلبات الكاشير - الطلبات محمية ولا تُحذف إلا عند إرسال التقرير اليومي');
-    socket.emit('initial_orders', serverActiveOrders);
+  app.get('/api/advances', (req, res) => {
+    try {
+      res.json(readJsonFile(advancesFile));
+    } catch (e) {
+      res.status(500).json({
+        error: 'فشل في جلب السلف والدفعات'
+      });
+    }
   });
 
-  // ==================== 🍳 طلبات المطبخ ==================== //
-
-  socket.on('get_kitchen_orders', () => {
-    socket.emit('initial_kitchen_orders', kitchenOrders);
-
-    console.log(
-      `📥 تم إرسال ${kitchenOrders.length} طلب للمطبخ`
-    );
+  app.get('/api/leaves', (req, res) => {
+    try {
+      res.json(readJsonFile(leavesFile));
+    } catch (e) {
+      res.status(500).json({
+        error: 'فشل في جلب الإجازات'
+      });
+    }
   });
 
-  // ==================== 🍽️ المنيو (تحديث آمن ودعم الترتيب والوجبات الجديدة والأسعار) ==================== //
-
-  socket.on('get_menu', () => {
-    const menu = getMenuData();
-
-    socket.emit('initial_menu_data', menu);
-    socket.emit('admin_menu_updated', menu);
-    socket.emit('menu_data', menu);
+  app.get('/api/exchange-rate', (req, res) => {
+    try {
+      res.json({
+        exchangeRate: currentExchangeRate
+      });
+    } catch (e) {
+      res.status(500).json({
+        error: 'فشل في جلب سعر الصرف'
+      });
+    }
   });
 
-  socket.on('fetch_menu', () => {
-    const menu = getMenuData();
+  // ==================== REST API تحديث المنيو (حفظ المصفوفة كاملة للترتيب) ==================== //
 
-    socket.emit('initial_menu_data', menu);
-    socket.emit('admin_menu_updated', menu);
-    socket.emit('menu_data', menu);
-  });
+  app.post('/api/menu', (req, res) => {
+    try {
+      const body = req.body;
 
-  // 🛑 الحذف النهائي الفوري للفواتير المسجلة عند ضغطة تصدير PDF من لوحة المدير
-  socket.on('clear_printed_invoices', () => {
-    const saved = writeJsonFile(invoicesFile, []);
-
-    if (!saved) return;
-
-    io.emit('initial_invoices', []);
-    io.emit('update_admin_invoices', []);
-
-    console.log('🗑️ تم تصدير الفواتير المسجلة وحذفها نهائياً من السيرفر والملف بناءً على طلب المدير');
-  });
-
-  // 🛑 الحذف النهائي الفوري للطلبات/الفواتير الملغاة عند ضغطة التصدير/التفريغ من لوحة المدير
-  socket.on('clear_cancelled_orders', () => {
-    const saved = writeJsonFile(cancelledFile, []);
-
-    if (!saved) return;
-
-    io.emit('initial_cancelled_orders', []);
-
-    console.log('🗑️ تم تفريغ وحذف الطلبات الملغاة نهائياً من السيرفر والملف بناءً على طلب المدير');
-  });
-
-  // 🛑 الحذف النهائي الفوري للتقييمات عند ضغطة التصدير/التفريغ من لوحة المدير
-  socket.on('clear_ratings', () => {
-    const saved = writeJsonFile(ratingsFile, []);
-
-    if (!saved) return;
-
-    io.emit('initial_ratings_data', []);
-
-    console.log('⭐🗑️ تم تفريغ وحذف تقييمات العملاء نهائياً من السيرفر والملف بناءً على طلب المدير');
-  });
-
-  // 🌟 الحدث الرئيسي لحفظ الترتيب والوجبات والأسعار تماماً كما يرسلها المدير
-  socket.on('admin_update_menu', (newMenuData, acknowledgement) => {
-    if (Array.isArray(newMenuData)) {
-      const success = saveAndBroadcastMenu(newMenuData);
-      if (typeof acknowledgement === 'function') {
-        acknowledgement({
-          success,
-          menu: success ? getMenuData() : undefined
+      // شاشة الإدارة ترسل القائمة كاملة. لا ندمجها مع القائمة القديمة
+      // لأن الدمج يعيد الأصناف المحذوفة ويفسد الترتيب.
+      if (!Array.isArray(body)) {
+        return res.status(400).json({
+          success: false,
+          error: 'يجب إرسال قائمة الطعام كاملة بصيغة مصفوفة'
         });
       }
-    } else if (newMenuData && typeof newMenuData === 'object') {
-      let currentMenu = getMenuData();
 
-      let itemsToProcess = [];
-      if (Array.isArray(newMenuData.menu)) {
-        itemsToProcess = newMenuData.menu;
-      } else if (Array.isArray(newMenuData.items)) {
-        itemsToProcess = newMenuData.items;
-      } else {
-        itemsToProcess = [newMenuData];
+      const saved = saveAndBroadcastMenu(body);
+      if (!saved) {
+        return res.status(500).json({
+          success: false,
+          error: 'فشل حفظ قائمة الطعام على السيرفر'
+        });
       }
 
-      itemsToProcess.forEach(itemData => {
-        if (!itemData) return;
+      const persistedMenu = getMenuData();
+      return res.status(200).json({
+        success: true,
+        menu: persistedMenu,
+        count: persistedMenu.length
+      });
+    } catch (e) {
+      console.error('❌ خطأ POST /api/menu:', e);
+      return res.status(500).json({
+        success: false,
+        error: 'فشل في تحديث قائمة الطعام'
+      });
+    }
+  });
+
+  // ==================== ⏱️ مؤقتات المطبخ ==================== //
+
+  const kitchenTimers = {};
+
+  // ==================== ⚡ SOCKET.IO ==================== //
+
+  io.on('connection', (socket) => {
+
+    console.log('⚡ جهاز متصل جديد:', socket.id);
+
+    // ==================== إرسال البيانات الأولية ==================== //
+
+    socket.emit('initial_menu_data', getMenuData());
+    socket.emit('menu_data', getMenuData());
+
+    socket.emit('initial_invoices', readJsonFile(invoicesFile));
+    socket.emit('initial_cancelled_orders', readJsonFile(cancelledFile));
+
+    socket.emit('initial_employees_data', readJsonFile(employeesFile));
+    socket.emit('initial_advances_data', readJsonFile(advancesFile));
+    socket.emit('initial_leaves_data', readJsonFile(leavesFile)); // 🌟 إرسال الإجازات الأولية
+
+    socket.emit('initial_ratings_data', readJsonFile(ratingsFile));
+    socket.emit('initial_reports_data', readJsonFile(reportsFile));
+
+    socket.emit('exchange_rate_updated', {
+      exchangeRate: currentExchangeRate
+    });
+
+    socket.emit('initial_kitchen_orders', kitchenOrders);
+
+    // ==================== 📦 طلبات الكاشير ==================== //
+
+    socket.on('get_active_orders', () => {
+      socket.emit('initial_orders', serverActiveOrders);
+
+      console.log(
+        `📦 تم إرسال ${serverActiveOrders.length} طلب نشط للكاشير من التخزين الدائم`
+      );
+    });
+
+    socket.on('get_today_orders', () => {
+      socket.emit('initial_orders', serverActiveOrders);
+      console.log(`📦 تم إرسال سجل طلبات اليوم بالكامل للكاشير (${serverActiveOrders.length} طلب).`);
+    });
+
+    // 🛵 جلب طلبات الدليفري الجاهزة فقط للسائق عند الاتصال
+    socket.on('get_driver_orders', () => {
+      const readyDeliveryOrders = serverActiveOrders.filter(
+        order => order.isDelivery === true && String(order.status || '').toLowerCase() === 'ready'
+      );
+      socket.emit('initial_orders', readyDeliveryOrders);
+      console.log(`🛵 تم إرسال ${readyDeliveryOrders.length} طلب دليفري جاهز للسائق`);
+    });
+
+    // 🛑 حماية طلبات الكاشير: لا يتم تفريغ الطلبات إلا عند إغلاق الصندوق وإرسال التقرير اليومي فقط
+    socket.on('clear_server_active_orders', () => {
+      console.log('🛡️ تم منع تفريغ طلبات الكاشير - الطلبات محمية ولا تُحذف إلا عند إغلاق الصندوق وإرسال التقرير اليومي');
+      socket.emit('initial_orders', serverActiveOrders);
+    });
+
+    // ==================== 🍳 طلبات المطبخ ==================== //
+
+    socket.on('get_kitchen_orders', () => {
+      socket.emit('initial_kitchen_orders', kitchenOrders);
+
+      console.log(
+        `📥 تم إرسال ${kitchenOrders.length} طلب للمطبخ`
+      );
+    });
+
+    // ==================== 🍽️ المنيو (تحديث آمن ودعم الترتيب والوجبات الجديدة والأسعار) ==================== //
+
+    socket.on('get_menu', () => {
+      const menu = getMenuData();
+
+      socket.emit('initial_menu_data', menu);
+      socket.emit('admin_menu_updated', menu);
+      socket.emit('menu_data', menu);
+    });
+
+    socket.on('fetch_menu', () => {
+      const menu = getMenuData();
+
+      socket.emit('initial_menu_data', menu);
+      socket.emit('admin_menu_updated', menu);
+      socket.emit('menu_data', menu);
+    });
+
+    // 🛑 الحذف النهائي الفوري للفواتير المسجلة وتحديث حالة الأرشفة لمنع عودتها
+    socket.on('clear_printed_invoices', () => {
+      const saved = writeJsonFile(invoicesFile, []);
+
+      if (!saved) return;
+
+      // تعليم الطلبات النشطة الحالية كأنها أُرشفت بالفعل لمنع تكرار عودتها
+      serverActiveOrders.forEach(o => o.isArchived = true);
+      saveActiveOrders();
+
+      io.emit('initial_invoices', []);
+      io.emit('update_admin_invoices', []);
+
+      console.log('🗑️ تم تصدير الفواتير المسجلة وحذفها نهائياً من السيرفر والملف بناءً على طلب المدير');
+    });
+
+    // 🛑 الحذف النهائي الفوري للطلبات/الفواتير الملغاة عند ضغطة التصدير/التفريغ من لوحة المدير
+    socket.on('clear_cancelled_orders', () => {
+      const saved = writeJsonFile(cancelledFile, []);
+
+      if (!saved) return;
+
+      io.emit('initial_cancelled_orders', []);
+
+      console.log('🗑️ تم تفريغ وحذف الطلبات الملغاة نهائياً من السيرفر والملف بناءً على طلب المدير');
+    });
+
+    // 🛑 الحذف النهائي الفوري للتقييمات من السيرفر والملف والمجلدات تماماً
+    socket.on('clear_ratings', () => {
+      const saved = writeJsonFile(ratingsFile, []);
+
+      if (!saved) {
+        console.error('❌ فشل تفريغ ملف التقييمات على السيرفر');
+        return;
+      }
+
+      // بث القائمة الفارغة لكافة لوحات المديرين المتصلة لتتحدث الشاشات فوراً
+      io.emit('initial_ratings_data', []);
+      io.emit('admin_ratings_cleared', []);
+
+      console.log('⭐🗑️ تم تفريغ وحذف تقييمات العملاء نهائياً من السيرفر وملف ratings.json بناءً على طلب المدير');
+    });
+
+    // 🛑 حذف تقرير إغلاق الصندوق نهائياً من السيرفر والملف
+    socket.on('delete_daily_report', (reportDate) => {
+      let reports = readJsonFile(reportsFile);
+      
+      reports = reports.filter(rep => rep['date']?.toString() !== reportDate?.toString());
+      
+      const saved = writeJsonFile(reportsFile, reports);
+      if (!saved) {
+        console.error('❌ فشل حذف التقرير من السيرفر');
+        return;
+      }
+
+      // بث القائمة المحدثة لكافة لوحات المديرين المتصلة
+      io.emit('initial_reports_data', reports);
+      console.log(`📊🗑️ تم حذف تقرير الإغلاق بتاريخ (${reportDate}) نهائياً من السيرفر والملف بنجاح`);
+    });
+
+    // 🌟 الحدث الرئيسي لحفظ الترتيب والوجبات والأسعار تماماً كما يرسلها المدير
+    socket.on('admin_update_menu', (newMenuData, acknowledgement) => {
+      if (Array.isArray(newMenuData)) {
+        const success = saveAndBroadcastMenu(newMenuData);
+        if (typeof acknowledgement === 'function') {
+          acknowledgement({
+            success,
+            menu: success ? getMenuData() : undefined
+          });
+        }
+      } else if (newMenuData && typeof newMenuData === 'object') {
+        let currentMenu = getMenuData();
+
+        let itemsToProcess = [];
+        if (Array.isArray(newMenuData.menu)) {
+          itemsToProcess = newMenuData.menu;
+        } else if (Array.isArray(newMenuData.items)) {
+          itemsToProcess = newMenuData.items;
+        } else {
+          itemsToProcess = [newMenuData];
+        }
+
+        itemsToProcess.forEach(itemData => {
+          if (!itemData) return;
+          if (!itemData.id) {
+            itemData.id = Date.now().toString() + Math.floor(Math.random() * 1000);
+          }
+
+          const index = currentMenu.findIndex(
+            (i) => i.id != null &&
+              i.id.toString() === itemData.id.toString()
+          );
+
+          if (index !== -1) {
+            currentMenu[index] = {
+              ...currentMenu[index],
+              ...itemData
+            };
+          } else {
+            currentMenu.push(itemData);
+          }
+        });
+
+        saveAndBroadcastMenu(currentMenu);
+      }
+    });
+
+    socket.on('update_menu_item', (itemData) => {
+      let currentMenu = getMenuData();
+
+      if (itemData) {
         if (!itemData.id) {
           itemData.id = Date.now().toString() + Math.floor(Math.random() * 1000);
         }
@@ -972,887 +982,906 @@ io.on('connection', (socket) => {
         } else {
           currentMenu.push(itemData);
         }
-      });
 
-      saveAndBroadcastMenu(currentMenu);
-    }
-  });
+        saveAndBroadcastMenu(currentMenu);
+      }
+    });
 
-  socket.on('update_menu_item', (itemData) => {
-    let currentMenu = getMenuData();
+    // ========================================================= //
+    // ==================== 👥 الموظفون ======================== //
+    // ========================================================= //
 
-    if (itemData) {
-      if (!itemData.id) {
-        itemData.id = Date.now().toString() + Math.floor(Math.random() * 1000);
+    socket.on('update_employees_list', (empDataList, callback) => {
+      console.log('');
+      console.log('📨 استقبل السيرفر طلب تحديث الموظفين');
+      console.log('🔌 مصدر الإرسال:', socket.id);
+
+      try {
+        const listToSave = normalizeListPayload(
+          empDataList,
+          ['employees', 'employeeList', 'employeesList']
+        );
+
+        console.log(`👥 عدد الموظفين المستلمين: ${listToSave.length}`);
+
+        const savedEmployees = saveDataList(
+          employeesFile,
+          listToSave,
+          'الموظفين'
+        );
+
+        console.log(`✅ تم حفظ الموظفين بنجاح في: ${employeesFile}`);
+        console.log(`📊 العدد النهائي المحفوظ: ${savedEmployees.length}`);
+
+        io.emit('employees_data_updated', savedEmployees);
+        io.emit('initial_employees_data', savedEmployees);
+
+        if (typeof callback === 'function') {
+          callback({
+            ok: true,
+            count: savedEmployees.length,
+            message: 'تم حفظ الموظفين بنجاح'
+          });
+        }
+
+      } catch (e)  {
+        console.error('❌ فشل حفظ الموظفين:', e.message);
+
+        if (typeof callback === 'function') {
+          callback({
+            ok: false,
+            count: 0,
+            message: e.message
+          });
+        }
+      }
+    });
+
+    // ========================================================= //
+    // ==================== 💸 السلف والدفعات ================== //
+    // ========================================================= //
+
+    socket.on('update_advances_list', (advDataList, callback) => {
+      console.log('');
+      console.log('📨 استقبل السيرفر طلب تحديث السلف والدفعات');
+      console.log('🔌 مصدر الإرسال:', socket.id);
+
+      try {
+        const listToSave = normalizeListPayload(
+          advDataList,
+          ['advances', 'advanceList', 'advancesList']
+        );
+
+        console.log(`💸 عدد السلف والدفعات المستلمة: ${listToSave.length}`);
+
+        const savedAdvances = saveDataList(
+          advancesFile,
+          listToSave,
+          'السلف والدفعات'
+        );
+
+        console.log(`✅ تم حفظ السلف والدفعات بنجاح في: ${advancesFile}`);
+        console.log(`📊 العدد النهائي المحفوظ: ${savedAdvances.length}`);
+
+        io.emit('advances_data_updated', savedAdvances);
+        io.emit('initial_advances_data', savedAdvances);
+
+        if (typeof callback === 'function') {
+          callback({
+            ok: true,
+            count: savedAdvances.length,
+            message: 'تم حفظ السلف والدفعات بنجاح'
+          });
+        }
+
+      } catch (e) {
+        console.error('❌ فشل حفظ السلف والدفعات:', e.message);
+
+        if (typeof callback === 'function') {
+          callback({
+            ok: false,
+            count: 0,
+            message: e.message
+          });
+        }
+      }
+    });
+
+    // ========================================================= //
+    // ==================== 🌴 الإجازات ======================== //
+    // ========================================================= //
+
+    socket.on('update_leaves_list', (leavesDataList, callback) => {
+      console.log('');
+      console.log('📨 استقبل السيرفر طلب تحديث الإجازات');
+      console.log('🔌 مصدر الإرسال:', socket.id);
+
+      try {
+        const listToSave = normalizeListPayload(
+          leavesDataList,
+          ['leaves', 'leaveList', 'leavesList']
+        );
+
+        console.log(`🌴 عدد الإجازات المستلمة: ${listToSave.length}`);
+
+        const savedLeaves = saveDataList(
+          leavesFile,
+          listToSave,
+          'الإجازات'
+        );
+
+        console.log(`✅ تم حفظ الإجازات بنجاح في: ${leavesFile}`);
+        console.log(`📊 العدد النهائي المحفوظ: ${savedLeaves.length}`);
+
+        io.emit('leaves_data_updated', savedLeaves);
+        io.emit('initial_leaves_data', savedLeaves);
+
+        if (typeof callback === 'function') {
+          callback({
+            ok: true,
+            count: savedLeaves.length,
+            message: 'تم حفظ الإجازات بنجاح'
+          });
+        }
+
+      } catch (e) {
+        console.error('❌ فشل حفظ الإجازات:', e.message);
+
+        if (typeof callback === 'function') {
+          callback({
+            ok: false,
+            count: 0,
+            message: e.message
+          });
+        }
+      }
+    });
+
+    // ==================== 📥 استقبال طلبات الزبائن والكاشير ==================== //
+
+    socket.on('send_order', (orderData, callback) => {
+
+      if (!orderData || typeof orderData !== 'object') {
+        console.warn('⚠️ تم استقبال طلب غير صالح');
+        return;
       }
 
-      const index = currentMenu.findIndex(
-        (i) => i.id != null &&
-          i.id.toString() === itemData.id.toString()
+      const orderId = normalizeOrderId(
+        orderData.id ?? orderData.orderId
       );
 
-      if (index !== -1) {
-        currentMenu[index] = {
-          ...currentMenu[index],
-          ...itemData
-        };
-      } else {
-        currentMenu.push(itemData);
+      if (!orderId) {
+        console.warn('⚠️ تم استقبال طلب دون رقم معرف');
+        return;
       }
 
-      saveAndBroadcastMenu(currentMenu);
-    }
-  });
 
-  // ========================================================= //
-  // ==================== 👥 الموظفون ======================== //
-  // ========================================================= //
-
-  socket.on('update_employees_list', (empDataList, callback) => {
-    console.log('');
-    console.log('📨 استقبل السيرفر طلب تحديث الموظفين');
-    console.log('🔌 مصدر الإرسال:', socket.id);
-
-    try {
-      const listToSave = normalizeListPayload(
-        empDataList,
-        ['employees', 'employeeList', 'employeesList']
-      );
-
-      console.log(`👥 عدد الموظفين المستلمين: ${listToSave.length}`);
-
-      const savedEmployees = saveDataList(
-        employeesFile,
-        listToSave,
-        'الموظفين'
-      );
-
-      console.log(`✅ تم حفظ الموظفين بنجاح في: ${employeesFile}`);
-      console.log(`📊 العدد النهائي المحفوظ: ${savedEmployees.length}`);
-
-      io.emit('employees_data_updated', savedEmployees);
-      io.emit('initial_employees_data', savedEmployees);
-
-      if (typeof callback === 'function') {
-        callback({
-          ok: true,
-          count: savedEmployees.length,
-          message: 'تم حفظ الموظفين بنجاح'
-        });
+  // تحديد نوع النطاق بناءً على مصدر الطلب أو خصائصه
+      let source = orderData.orderSource || 'cashier';
+      if (orderData.isDelivery === true) {
+        source = 'delivery';
+      } else if (orderData.fromCustomerApp === true) {
+        source = 'customer';
       }
 
-    } catch (e)  {
-      console.error('❌ فشل حفظ الموظفين:', e.message);
+      // استخدام رقم الفاتورة القادم محلياً من الجهاز إن وُجد، وإلا التوليد التلقائي كخيار احتياطي
+      const incomingInvoiceNumber = orderData.invoiceNumber ?? orderData.orderNumber;
+      const hasLocalNumber = incomingInvoiceNumber !== undefined && incomingInvoiceNumber !== null && String(incomingInvoiceNumber).trim() !== '';
+      // نعتمد رقم الفاتورة المحلي القادم من التطبيق فقط؛ لا يوجد عداد فواتير على السيرفر.
+      const serialInvoiceNumber = hasLocalNumber ? incomingInvoiceNumber : orderId;
+      // توقيت السيرفر المحلي اللحظي
+      const exactServerTime = getLocalDateTimeString();
 
-      if (typeof callback === 'function') {
-        callback({
-          ok: false,
-          count: 0,
-          message: e.message
-        });
-      }
-    }
-  });
+      // 🛡️ التعديل الوحيد المطلوب: جعل جميع الطلبات تبدأ بحالة معلق (pending)
+      const initialStatus = 'pending';
 
-  // ========================================================= //
-  // ==================== 💸 السلف والدفعات ================== //
-  // ========================================================= //
-
-  socket.on('update_advances_list', (advDataList, callback) => {
-    console.log('');
-    console.log('📨 استقبل السيرفر طلب تحديث السلف والدفعات');
-    console.log('🔌 مصدر الإرسال:', socket.id);
-
-    try {
-      const listToSave = normalizeListPayload(
-        advDataList,
-        ['advances', 'advanceList', 'advancesList']
-      );
-
-      console.log(`💸 عدد السلف والدفعات المستلمة: ${listToSave.length}`);
-
-      const savedAdvances = saveDataList(
-        advancesFile,
-        listToSave,
-        'السلف والدفعات'
-      );
-
-      console.log(`✅ تم حفظ السلف والدفعات بنجاح في: ${advancesFile}`);
-      console.log(`📊 العدد النهائي المحفوظ: ${savedAdvances.length}`);
-
-      io.emit('advances_data_updated', savedAdvances);
-      io.emit('initial_advances_data', savedAdvances);
-
-      if (typeof callback === 'function') {
-        callback({
-          ok: true,
-          count: savedAdvances.length,
-          message: 'تم حفظ السلف والدفعات بنجاح'
-        });
-      }
-
-    } catch (e) {
-      console.error('❌ فشل حفظ السلف والدفعات:', e.message);
-
-      if (typeof callback === 'function') {
-        callback({
-          ok: false,
-          count: 0,
-          message: e.message
-        });
-      }
-    }
-  });
-
-  // ========================================================= //
-  // ==================== 🌴 الإجازات ======================== //
-  // ========================================================= //
-
-  socket.on('update_leaves_list', (leavesDataList, callback) => {
-    console.log('');
-    console.log('📨 استقبل السيرفر طلب تحديث الإجازات');
-    console.log('🔌 مصدر الإرسال:', socket.id);
-
-    try {
-      const listToSave = normalizeListPayload(
-        leavesDataList,
-        ['leaves', 'leaveList', 'leavesList']
-      );
-
-      console.log(`🌴 عدد الإجازات المستلمة: ${listToSave.length}`);
-
-      const savedLeaves = saveDataList(
-        leavesFile,
-        listToSave,
-        'الإجازات'
-      );
-
-      console.log(`✅ تم حفظ الإجازات بنجاح في: ${leavesFile}`);
-      console.log(`📊 العدد النهائي المحفوظ: ${savedLeaves.length}`);
-
-      io.emit('leaves_data_updated', savedLeaves);
-      io.emit('initial_leaves_data', savedLeaves);
-
-      if (typeof callback === 'function') {
-        callback({
-          ok: true,
-          count: savedLeaves.length,
-          message: 'تم حفظ الإجازات بنجاح'
-        });
-      }
-
-    } catch (e) {
-      console.error('❌ فشل حفظ الإجازات:', e.message);
-
-      if (typeof callback === 'function') {
-        callback({
-          ok: false,
-          count: 0,
-          message: e.message
-        });
-      }
-    }
-  });
-
-  // ==================== 📥 استقبال طلبات الزبائن والكاشير ==================== //
-
-  socket.on('send_order', (orderData, callback) => {
-
-    if (!orderData || typeof orderData !== 'object') {
-      console.warn('⚠️ تم استقبال طلب غير صالح');
-      return;
-    }
-
-    const orderId = normalizeOrderId(
-      orderData.id ?? orderData.orderId
-    );
-
-    if (!orderId) {
-      console.warn('⚠️ تم استقبال طلب دون رقم معرف');
-      return;
-    }
-
-    // تحديد نوع النطاق بناءً على مصدر الطلب أو خصائصه
-    let source = orderData.orderSource || 'cashier';
-    if (orderData.isDelivery === true) {
-      source = 'delivery';
-    } else if (orderData.fromCustomerApp === true) {
-      source = 'customer';
-    }
-
-    // استخدام رقم الفاتورة القادم محلياً من الجهاز إن وُجد، وإلا التوليد التلقائي كخيار احتياطي
-    const incomingInvoiceNumber = orderData.invoiceNumber ?? orderData.orderNumber;
-    const hasLocalNumber = incomingInvoiceNumber !== undefined && incomingInvoiceNumber !== null && String(incomingInvoiceNumber).trim() !== '';
-    const serialInvoiceNumber = hasLocalNumber ? incomingInvoiceNumber : getNextRangeInvoiceNumber(source);
-
-    // توقيت السيرفر المحلي اللحظي
-    const exactServerTime = getLocalDateTimeString();
-
-    // ⚡ التعديل المطلوب: الطلب المباشر من الكاشير فقط هو ما يصبح confirmed ويذهب للمطبخ فوراً،
-    // أما طلبات تطبيق الزبون الداخلي أو الدليفري فتصبح معلقة pending ولن تذهب للمطبخ إلا بعد موافقة الكاشير.
-    const isDirectCashierOrder = (source === 'cashier' || orderData.isDirectOrder === true || orderData.isTakeaway === true || orderData.fromCashier === true) 
-                                 && orderData.fromCustomerApp !== true 
-                                 && orderData.isDelivery !== true;
-
-    const initialStatus = isDirectCashierOrder ? 'confirmed' : 'pending';
-
-    const normalizedOrder = {
-      ...orderData,
-      id: orderId,
-      orderId: orderId,
-      invoiceNumber: serialInvoiceNumber,
-      orderNumber: serialInvoiceNumber,
-      createdAt: exactServerTime, // تثبيت وقت وصول الطلب للسيرفر بدقة
-      status: initialStatus, 
-      fromCustomerApp: source === 'customer', 
-      fromCashier: isDirectCashierOrder
-    };
-
-    const existingIndex = serverActiveOrders.findIndex(
-      (o) => getKitchenOrderId(o) === orderId
-    );
-
-    if (existingIndex === -1) {
-      serverActiveOrders.push(normalizedOrder);
-    } else {
-      serverActiveOrders[existingIndex] = {
-        ...serverActiveOrders[existingIndex],
-        ...normalizedOrder
-      };
-    }
-
-    // 💾 الحفظ الفوري والدائم في ملف القرص لحمايتها من انقطاع التيار الكهربائي
-    saveActiveOrders();
-
-    // 👨‍🍳 إرسال الطلب للمطبخ حصراً إذا كان طلباً مباشراً من الكاشير، وإلا إبقاؤه معلقاً لطلبات الزبون والدليفري لحين موافقة الكاشير
-    if (initialStatus === 'confirmed') {
-      upsertKitchenOrder(normalizedOrder);
-      io.emit('new_kitchen_order', normalizedOrder);
-      console.log(`⚡ [طلب مباشر من الكاشير] تم إرسال الطلب #${orderId} للمطبخ فوراً.`);
-    } else {
-      console.log(`⏳ [طلب معلق] تم استلام طلب (${source}) #${orderId} بحالة معلق ولن يدخل المطبخ إلا بموافقة الكاشير.`);
-    }
-
-    // بث الطلب للكاشير
-    io.emit('new_order', normalizedOrder);
-    socket.broadcast.emit('new_order_to_cashier', normalizedOrder);
-
-    // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة عبر الـ Callback
-    if (typeof callback === 'function') {
-      callback({
-        success: true,
+      const normalizedOrder = {
+        ...orderData,
+        id: orderId,
+        orderId: orderId,
         invoiceNumber: serialInvoiceNumber,
         orderNumber: serialInvoiceNumber,
-        orderId: orderId,
-        createdAt: exactServerTime
-      });
-    }
-
-    console.log(`📥 [${source.toUpperCase()}] تم حفظ الطلب رقم ${serialInvoiceNumber} بنجاح.`);
-  });
-
-  // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
-
-  socket.on('update_order_broadcast', (updatedOrder) => {
-    if (!updatedOrder || typeof updatedOrder !== 'object') return;
-    const orderId = normalizeOrderId(updatedOrder.id ?? updatedOrder.orderId);
-    if (!orderId) return;
-
-    const index = serverActiveOrders.findIndex(o => getKitchenOrderId(o) === orderId);
-    if (index !== -1) {
-      serverActiveOrders[index] = {
-        ...serverActiveOrders[index],
-        ...updatedOrder,
-        id: orderId,
-        orderId: orderId
+        createdAt: exactServerTime, // تثبيت وقت وصول الطلب للسيرفر بدقة
+        status: initialStatus, 
+        fromCustomerApp: source === 'customer', 
+        fromCashier: false
       };
-      saveActiveOrders(); // 💾 حفظ التعديل فوراً
-    }
 
-    socket.broadcast.emit('order_updated_broadcast', updatedOrder);
-    console.log(`🔄 تم بث تعديل الطلب #${orderId} لكافة المتصفحات بنجاح.`);
-  });
+      const existingIndex = serverActiveOrders.findIndex(
+        (o) => getKitchenOrderId(o) === orderId
+      );
 
-  socket.on('remove_order_broadcast', (data) => {
-    if (!data) return;
-    const orderId = normalizeOrderId(data.orderId ?? data.id);
-    if (!orderId) return;
+      // الطلب الموجود مسبقاً لا يُنشأ ولا يُبث مرة ثانية، سواء كان نشطاً أو نهائياً.
+      // هذا يمنع إعادة الطلب للكاشير عند وصول إعادة إرسال/حزمة متأخرة من أي تطبيق.
+      if (existingIndex !== -1) {
+        const existingOrder = serverActiveOrders[existingIndex];
+        const existingStatus = String(existingOrder.status || '').toLowerCase();
+        console.log(`🛡️ تم تجاهل إعادة إرسال الطلب الموجود #${orderId} (الحالة: ${existingStatus}).`);
+        if (typeof callback === 'function') {
+          callback({
+            success: true,
+            ignored: true,
+            status: existingStatus,
+            orderId,
+            invoiceNumber: existingOrder.invoiceNumber ?? serialInvoiceNumber
+          });
+        }
+        return;
+      }
 
-    // 🛑 حذف الطلب من المطبخ فقط عند الانتهاء، بينما يبقى في الكاشير محمياً حتى إغلاق الصندوق
-    removeKitchenOrder(orderId);
+      if (existingIndex === -1) {
+        serverActiveOrders.push(normalizedOrder);
+      } else {
+        serverActiveOrders[existingIndex] = {
+          ...serverActiveOrders[existingIndex],
+          ...normalizedOrder
+        };
+      }
 
-    io.emit('order_removed_broadcast', { orderId: orderId });
-    console.log(`🗑️ تم بث إزالة الطلب #${orderId} من المطبخ مع بقائه محمياً لدى الكاشير.`);
-  });
+      // 💾 الحفظ الفوري والدائم في ملف القرص لحمايتها من انقطاع التيار الكهربائي
+      saveActiveOrders();
 
-  // ==================== 🚀 تحويل الطلب للمدير ==================== //
+      // 🛑 تنبيه لوجستي: ممنوع إرسال الطلب للمطبخ هنا نهائياً، سيتم إرساله فقط عبر حدث 'send_to_kitchen' عند ضغطة الكاشير
+      console.log(`⏳ [طلب معلق] تم استلام طلب (${source}) #${orderId} بحالة معلق ولن يدخل المطبخ إلا بموافقة الكاشير.`);
 
-  socket.on('cashier_forward_order', (orderData) => {
+      // بث الطلب للكاشير فقط في قسم "طلبات جديدة"
+      io.emit('new_order', normalizedOrder);
+      socket.broadcast.emit('new_order_to_cashier', normalizedOrder);
 
-    if (!orderData || typeof orderData !== 'object') return;
+      // 📤 إرسال الرقم التسلسلي الحقيقي مباشرة عبر الـ Callback
+      if (typeof callback === 'function') {
+        callback({
+          success: true,
+          invoiceNumber: serialInvoiceNumber,
+          orderNumber: serialInvoiceNumber,
+          orderId: orderId,
+          createdAt: exactServerTime
+        });
+      }
 
-    io.emit('new_order_to_manager', orderData);
-
-    console.log(
-      '🚀 تم إرسال الطلب للمدير:',
-      orderData.id || orderData.orderId
-    );
-  });
-
-  // ==================== 🛵 قبول طلب التوصيل من أحد السائقين وإزالته من عند البقية فقط ==================== //
-  socket.on('driver_accept_order', (data) => {
-    if (!data || typeof data !== 'object') return;
-    const orderId = normalizeOrderId(data.orderId ?? data.id);
-    if (!orderId) return;
-
-    socket.broadcast.emit('driver_order_accepted', { 
-      orderId: orderId,
-      driverSocketId: data.driverSocketId || socket.id
+      console.log(`📥 [${source.toUpperCase()}] تم حفظ الطلب رقم ${serialInvoiceNumber} بنجاح.`);
     });
 
-    console.log(`🛵 تم قبول طلب الدليفري #${orderId} بواسطة السائق وتم إزالته من شاشات باقي الزملاء فقط.`);
-  });
+    // ==================== 🔄 أحداث المزامنة الفورية للتعديل والحذف بين المتصفحات ==================== //
 
-  socket.on('driver_accepted_order_notification', (data) => {
-    if (!data || typeof data !== 'object') return;
-    const orderId = normalizeOrderId(data.orderId ?? data.id);
-    if (!orderId) return;
+    socket.on('update_order_broadcast', (updatedOrder) => {
+      if (!updatedOrder || typeof updatedOrder !== 'object') return;
+      const orderId = normalizeOrderId(updatedOrder.id ?? updatedOrder.orderId);
+      if (!orderId) return;
 
-    io.emit('customer_order_on_the_way', {
-      orderId: orderId,
-      message: 'طلبكم في الطريق إليكم شاورما لاب لديكم لا خوف عليكم 🛵'
+      const index = serverActiveOrders.findIndex(o => getKitchenOrderId(o) === orderId);
+      if (index !== -1) {
+        serverActiveOrders[index] = {
+          ...serverActiveOrders[index],
+          ...updatedOrder,
+          id: orderId,
+          orderId: orderId
+        };
+        saveActiveOrders(); // 💾 حفظ التعديل فوراً
+      }
+
+      socket.broadcast.emit('order_updated_broadcast', updatedOrder);
+      console.log(`🔄 تم بث تعديل الطلب #${orderId} لكافة المتصفحات بنجاح.`);
     });
 
-    console.log(`🛵 تم إرسال إشعار تتبع الزبون للطلب #${orderId} بنجاح.`);
-  });
+    socket.on('remove_order_broadcast', (data) => {
+      if (!data) return;
+      const orderId = normalizeOrderId(data.orderId ?? data.id);
+      if (!orderId) return;
 
-  // ==================== 🔄 تحديث حالة الطلب العامة ==================== //
+      // 🛑 حذف الطلب من المطبخ فقط عند الانتهاء، بينما يبقى في الكاشير محمياً حتى إغلاق الصندوق
+      removeKitchenOrder(orderId);
 
-  socket.on('update_order_status', (statusData) => {
+      io.emit('order_removed_broadcast', { orderId: orderId });
+      console.log(`🗑️ تم بث إزالة الطلب #${orderId} من المطبخ مع بقائه محمياً لدى الكاشير.`);
+    });
 
-    if (!statusData || typeof statusData !== 'object') return;
+    // ==================== 🚀 تحويل الطلب للمدير ==================== //
 
-    const orderId = normalizeOrderId(
-      statusData.orderId ?? statusData.id
-    );
+    socket.on('cashier_forward_order', (orderData) => {
 
-    const status = String(
-      statusData.status || ''
-    ).toLowerCase();
+      if (!orderData || typeof orderData !== 'object') return;
 
-    if (!orderId) return;
+      io.emit('new_order_to_manager', orderData);
 
-    const orderIndex = serverActiveOrders.findIndex(
-      (o) => getKitchenOrderId(o) === orderId
-    );
+      console.log(
+        '🚀 تم إرسال الطلب للمدير:',
+        orderData.id || orderData.orderId
+      );
+    });
 
-    if (orderIndex !== -1) {
-      serverActiveOrders[orderIndex] = {
-        ...serverActiveOrders[orderIndex],
+    // ==================== 🛵 قبول طلب التوصيل من أحد السائقين وإزالته من عند البقية فقط ==================== //
+    socket.on('driver_accept_order', (data) => {
+      if (!data || typeof data !== 'object') return;
+      const orderId = normalizeOrderId(data.orderId ?? data.id);
+      if (!orderId) return;
+
+      socket.broadcast.emit('driver_order_accepted', { 
+        orderId: orderId,
+        driverSocketId: data.driverSocketId || socket.id
+      });
+
+      console.log(`🛵 تم قبول طلب الدليفري #${orderId} بواسطة السائق وتم إزالته من شاشات باقي الزملاء فقط.`);
+    });
+
+    socket.on('driver_accepted_order_notification', (data) => {
+      if (!data || typeof data !== 'object') return;
+      const orderId = normalizeOrderId(data.orderId ?? data.id);
+      if (!orderId) return;
+
+      io.emit('customer_order_on_the_way', {
+        orderId: orderId,
+        message: 'طلبكم في الطريق إليكم شاورما لاب لديكم لا خوف عليكم 🛵'
+      });
+
+      console.log(`🛵 تم إرسال إشعار تتبع الزبون للطلب #${orderId} بنجاح.`);
+    });
+
+    // ==================== 🔄 تحديث حالة الطلب العامة ==================== //
+
+    socket.on('update_order_status', (statusData) => {
+
+      if (!statusData || typeof statusData !== 'object') return;
+
+      const orderId = normalizeOrderId(
+        statusData.orderId ?? statusData.id
+      );
+
+      const status = String(
+        statusData.status || ''
+      ).toLowerCase();
+
+      if (!orderId) return;
+
+      const orderIndex = serverActiveOrders.findIndex(
+        (o) => getKitchenOrderId(o) === orderId
+      );
+
+      if (orderIndex !== -1) {
+        const previousStatus = String(serverActiveOrders[orderIndex].status || '').toLowerCase();
+        const terminalStatuses = ['delivered', 'cancelled', 'completed'];
+        if (terminalStatuses.includes(previousStatus) && status !== previousStatus) {
+          console.log(`🛡️ تم منع تغيير حالة الطلب النهائي #${orderId} من ${previousStatus} إلى ${status}.`);
+          return;
+        }
+
+        serverActiveOrders[orderIndex] = {
+          ...serverActiveOrders[orderIndex],
+          ...statusData,
+          id: orderId,
+          orderId: orderId,
+          status: status,
+          ...(status === 'delivered' ? { isArchived: true } : {})
+        };
+        saveActiveOrders(); // 💾 حفظ تغيير الحالة في القرص الدائم فوراً
+      }
+
+      const normalizedStatusData = {
         ...statusData,
         id: orderId,
         orderId: orderId,
         status: status
       };
-      saveActiveOrders(); // 💾 حفظ تغيير الحالة (مثل منتهي أو قيد التحضير) في القرص الدائم فوراً
-    }
 
-    const normalizedStatusData = {
-      ...statusData,
-      id: orderId,
-      orderId: orderId,
-      status: status
-    };
-
-    io.emit('order_status_updated', normalizedStatusData);
-
-    console.log(
-      '🔄 تحديث حالة الطلب:',
-      orderId,
-      'إلى:',
-      status
-    );
-
-    if (status === 'ready') {
-      notifyOrderReady(normalizedStatusData);
-    }
-
-    if (isFinalKitchenStatus(status)) {
-
-      removeKitchenOrder(orderId);
-
-      io.emit('kitchen_order_updated', normalizedStatusData);
-
-      if (kitchenTimers[orderId]) {
-        clearTimeout(kitchenTimers[orderId]);
-        delete kitchenTimers[orderId];
-
-        console.log(
-          `✅ تم إيقاف مؤقت الطلب #${orderId}`
-        );
-      }
-    }
-
-    // 🔍 فحص أرشفة الفواتير للمدير دون حذف أي طلب من الكاشير
-    checkAndArchiveCompletedOrders();
-  });
-
-  // ==================== 🛵 تسليم طلب الدليفري ==================== //
-
-  socket.on('order_delivered_notification', (data) => {
-
-    if (!data || typeof data !== 'object') return;
-
-    const orderId = normalizeOrderId(
-      data.orderId ?? data.id
-    );
-
-    if (!orderId) return;
-
-    console.log(
-      `🛵 تم تسليم طلب الدليفري #${orderId}`
-    );
-
-    // تحديث حالة الطلب إلى delivered مع إبقائه محمياً في قائمة الكاشير حتى إغلاق الصندوق وحفظه
-    const orderIndex = serverActiveOrders.findIndex(
-      (o) => getKitchenOrderId(o) === orderId
-    );
-    if (orderIndex !== -1) {
-      serverActiveOrders[orderIndex] = {
-        ...serverActiveOrders[orderIndex],
-        status: 'delivered'
-      };
-      saveActiveOrders(); // 💾 حفظ تحديث التسليم
-    }
-
-    removeKitchenOrder(orderId);
-
-    io.emit('order_delivered_notification', {
-      ...data,
-      orderId
-    });
-
-    io.emit('kitchen_order_updated', {
-      ...data,
-      id: orderId,
-      orderId,
-      status: 'delivered'
-    });
-
-    if (kitchenTimers[orderId]) {
-      clearTimeout(kitchenTimers[orderId]);
-      delete kitchenTimers[orderId];
-    }
-
-    // 🔍 فحص الأرشفة عند تسليم الدليفري
-    checkAndArchiveCompletedOrders();
-  });
-
-  // ==================== 👨‍🍳 إرسال الطلب للمطبخ (بعد موافقة وتأكيد الكاشير حصراً) ==================== //
-
-  socket.on('send_to_kitchen', (orderData) => {
-
-    if (!orderData || typeof orderData !== 'object') {
-      console.error('❌ بيانات الطلب المرسل للمطبخ غير صالحة');
-      return;
-    }
-
-    const orderId = getKitchenOrderId(orderData);
-
-    if (!orderId) {
-      console.error(
-        '❌ طلب المطبخ لا يحتوي على id أو orderId'
-      );
-      return;
-    }
-
-    const normalizedOrder = {
-      ...orderData,
-      id: orderId,
-      orderId: orderId,
-      status: 'confirmed', // تثبيت الحالة كـ مؤكد عند إرساله للمطبخ
-      fromCustomerApp: orderData.fromCustomerApp === true,
-    };
-
-    const activeIndex = serverActiveOrders.findIndex(
-      (order) => getKitchenOrderId(order) === orderId
-    );
-
-    if (activeIndex !== -1) {
-      serverActiveOrders[activeIndex] = {
-        ...serverActiveOrders[activeIndex],
-        ...normalizedOrder,
-        status: 'confirmed'
-      };
-    } else {
-      serverActiveOrders.push(normalizedOrder);
-    }
-    saveActiveOrders(); // 💾 حفظ التحديث الدائم
-
-    const saved = upsertKitchenOrder(normalizedOrder);
-
-    if (!saved) {
-      console.error(
-        `❌ لم يتم تأكيد حفظ الطلب #${orderId}`
-      );
-    }
-
-    io.emit('new_kitchen_order', normalizedOrder);
-
-    console.log(
-      `👨‍🍳 [موافقة الكاشير] تم إرسال الطلب #${orderId} للمطبخ بنجاح.`
-    );
-
-    if (kitchenTimers[orderId]) {
-      clearTimeout(kitchenTimers[orderId]);
-    }
-
-    kitchenTimers[orderId] = setTimeout(() => {
+      io.emit('order_status_updated', normalizedStatusData);
 
       console.log(
-        `⚠️ الطلب #${orderId} تأخر أكثر من 15 دقيقة`
+        '🔄 تحديث حالة الطلب:',
+        orderId,
+        'إلى:',
+        status
       );
 
-      io.emit('admin_order_delayed_warning', {
-        orderId: orderId,
-        tableNumber: normalizedOrder.tableNumber || '1',
-        items: normalizedOrder.items || [],
-        createdAt: normalizedOrder.createdAt || new Date().toISOString(),
-        delayedMinutes: 15
+      if (status === 'ready') {
+        notifyOrderReady(normalizedStatusData);
+      }
+
+      if (isFinalKitchenStatus(status)) {
+
+        removeKitchenOrder(orderId);
+
+        io.emit('kitchen_order_updated', normalizedStatusData);
+
+        if (kitchenTimers[orderId]) {
+          clearTimeout(kitchenTimers[orderId]);
+          delete kitchenTimers[orderId];
+
+          console.log(
+            `✅ تم إيقاف مؤقت الطلب #${orderId}`
+          );
+        }
+      }
+
+      // 🔍 فحص أرشفة الفواتير للمدير دون حذف أي طلب من الكاشير
+      checkAndArchiveCompletedOrders();
+    });
+
+    // ==================== 🛵 تسليم طلب الدليفري (الحل النهائي لمنع التكرار والدوامة) ==================== //
+
+    socket.on('order_delivered_notification', (data) => {
+
+      if (!data || typeof data !== 'object') return;
+
+      const orderId = normalizeOrderId(
+        data.orderId ?? data.id
+      );
+
+      if (!orderId) return;
+
+      console.log(
+        `🛵 [تسليم نهائي] تم تسليم طلب الدليفري #${orderId} للزبون بنجاح ولن يتم تكراره.`
+      );
+
+      const orderIndex = serverActiveOrders.findIndex(
+        (o) => getKitchenOrderId(o) === orderId
+      );
+      if (orderIndex !== -1) {
+        const currentStatus = String(serverActiveOrders[orderIndex].status || '').toLowerCase();
+        if (currentStatus === 'delivered') {
+          console.log(`ℹ️ تم تجاهل إشعار تسليم مكرر للطلب #${orderId}.`);
+          return;
+        }
+        if (currentStatus === 'cancelled') {
+          console.log(`🛡️ تم تجاهل تسليم طلب ملغى #${orderId}.`);
+          return;
+        }
+        serverActiveOrders[orderIndex] = {
+          ...serverActiveOrders[orderIndex],
+          status: 'delivered',
+          isArchived: true // 🛡️ قفل الطلب نهائياً لعدم عودته
+        };
+        saveActiveOrders();
+      }
+
+      removeKitchenOrder(orderId);
+
+      // مزامنة الحالة النهائية مع كل التطبيقات، ثم إرسال إشعار التسليم.
+      io.emit('order_status_updated', {
+        ...data,
+        id: orderId,
+        orderId,
+        status: 'delivered'
       });
 
-    }, 15 * 60 * 1000);
-  });
+      // بث رسالة الإغلاق مرة واحدة لجميع الشاشات لكي يختفي الطلب تماماً من الواجهات النشطة
+      io.emit('order_delivered_notification', {
+        ...data,
+        orderId,
+        status: 'delivered'
+      });
 
-  // ==================== 🔄 تحديث طلب المطبخ ==================== //
+      io.emit('order_removed_broadcast', { orderId: orderId });
 
-  socket.on('update_kitchen_order', (orderData) => {
+      io.emit('kitchen_order_updated', {
+        ...data,
+        id: orderId,
+        orderId,
+        status: 'delivered'
+      });
 
-    if (!orderData || typeof orderData !== 'object') {
-      console.warn('⚠️ تحديث طلب مطبخ غير صالح');
-      return;
-    }
+      if (kitchenTimers[orderId]) {
+        clearTimeout(kitchenTimers[orderId]);
+        delete kitchenTimers[orderId];
+      }
 
-    const orderId = getKitchenOrderId(orderData);
+      checkAndArchiveCompletedOrders();
+    });
 
-    const status = String(
-      orderData.status || ''
-    ).toLowerCase();
+    // ==================== 👨‍🍳 إرسال الطلب للمطبخ وتثبيته في الطلبات المؤكدة ==================== //
 
-    if (!orderId) {
-      console.warn(
-        '⚠️ تحديث المطبخ لا يحتوي على id أو orderId'
-      );
-      return;
-    }
+    socket.on('send_to_kitchen', (orderData) => {
 
-    const normalizedOrder = {
-      ...orderData,
-      id: orderId,
-      orderId: orderId,
-      status: status
-    };
+      if (!orderData || typeof orderData !== 'object') {
+        console.error('❌ بيانات الطلب المرسل للمطبخ غير صالحة');
+        return;
+      }
 
-    if (isFinalKitchenStatus(status)) {
-      removeKitchenOrder(orderId);
-    } else {
-      upsertKitchenOrder(normalizedOrder);
-    }
+      const orderId = getKitchenOrderId(orderData);
 
-    const activeIndex = serverActiveOrders.findIndex(
-      (order) => getKitchenOrderId(order) === orderId
-    );
+      if (!orderId) {
+        console.error(
+          '❌ طلب المطبخ لا يحتوي على id أو orderId'
+        );
+        return;
+      }
 
-    if (activeIndex !== -1) {
-      serverActiveOrders[activeIndex] = {
-        ...serverActiveOrders[activeIndex],
-        ...normalizedOrder
+      const normalizedOrder = {
+        ...orderData,
+        id: orderId,
+        orderId: orderId,
+        status: 'confirmed', // 👈 تثبيت الحالة كـ مؤكد ليظهر مباشرة في قسم الطلبات المؤكدة عند الكاشير
+        fromCustomerApp: orderData.fromCustomerApp === true,
       };
-      saveActiveOrders(); // 💾 حفظ حالة المطبخ والتحضير الدائمة
-    }
 
-    io.emit('kitchen_order_updated', normalizedOrder);
+      const activeIndex = serverActiveOrders.findIndex(
+        (order) => getKitchenOrderId(order) === orderId
+      );
 
-    console.log(
-      '🔄 تحديث طلب المطبخ:',
-      orderId,
-      'الحالة:',
-      status
-    );
+      if (activeIndex !== -1) {
+        serverActiveOrders[activeIndex] = {
+          ...serverActiveOrders[activeIndex],
+          ...normalizedOrder,
+          status: 'confirmed'
+        };
+      } else {
+        serverActiveOrders.push(normalizedOrder);
+      }
+      saveActiveOrders();
 
-    if (status === 'ready') {
-      notifyOrderReady(normalizedOrder);
-    }
+      const saved = upsertKitchenOrder(normalizedOrder);
 
-    if (isFinalKitchenStatus(status)) {
+      if (!saved) {
+        console.error(
+          `❌ لم يتم تأكيد حفظ الطلب #${orderId}`
+        );
+      }
+
+      io.emit('new_kitchen_order', normalizedOrder);
+      io.emit('order_status_updated', normalizedOrder); // 👈 تحديث حالة الطلب لحظياً لتنتقل إلى المؤكدة
+
+      console.log(
+        `👨‍🍳 [تأكيد الكاشير] تم تأكيد الطلب #${orderId} وإرساله للمطبخ وانتقاله للطلبات المؤكدة بنجاح.`
+      );
+
+      if (kitchenTimers[orderId]) {
+        clearTimeout(kitchenTimers[orderId]);
+      }
+
+      kitchenTimers[orderId] = setTimeout(() => {
+
+        console.log(
+          `⚠️ الطلب #${orderId} تأخر أكثر من 15 دقيقة`
+        );
+
+        io.emit('admin_order_delayed_warning', {
+          orderId: orderId,
+          tableNumber: normalizedOrder.tableNumber || '1',
+          items: normalizedOrder.items || [],
+          createdAt: normalizedOrder.createdAt || new Date().toISOString(),
+          delayedMinutes: 15
+        });
+
+      }, 15 * 60 * 1000);
+    });
+
+    // ==================== 🔄 تحديث طلب المطبخ ==================== //
+
+    socket.on('update_kitchen_order', (orderData) => {
+
+      if (!orderData || typeof orderData !== 'object') {
+        console.warn('⚠️ تحديث طلب مطبخ غير صالح');
+        return;
+      }
+
+      const orderId = getKitchenOrderId(orderData);
+
+      const status = String(
+        orderData.status || ''
+      ).toLowerCase();
+
+      if (!orderId) {
+        console.warn(
+          '⚠️ تحديث المطبخ لا يحتوي على id أو orderId'
+        );
+        return;
+      }
+
+      const normalizedOrder = {
+        ...orderData,
+        id: orderId,
+        orderId: orderId,
+        status: status
+      };
+
+      if (isFinalKitchenStatus(status)) {
+        removeKitchenOrder(orderId);
+      } else {
+        upsertKitchenOrder(normalizedOrder);
+      }
+
+      const activeIndex = serverActiveOrders.findIndex(
+        (order) => getKitchenOrderId(order) === orderId
+      );
+
+      if (activeIndex !== -1) {
+        serverActiveOrders[activeIndex] = {
+          ...serverActiveOrders[activeIndex],
+          ...normalizedOrder
+        };
+        saveActiveOrders(); // 💾 حفظ حالة المطبخ الدائمة
+      }
+
+      io.emit('kitchen_order_updated', normalizedOrder);
+
+      console.log(
+        '🔄 تحديث طلب المطبخ:',
+        orderId,
+        'الحالة:',
+        status
+      );
+
+      if (status === 'ready') {
+        notifyOrderReady(normalizedOrder);
+      }
+
+      if (isFinalKitchenStatus(status)) {
+
+        if (kitchenTimers[orderId]) {
+
+          clearTimeout(kitchenTimers[orderId]);
+          delete kitchenTimers[orderId];
+
+          console.log(
+            `✅ تم إيقاف مؤقت الطلب #${orderId}`
+          );
+        }
+      }
+
+      // 🔍 فحص الأرشفة عند تحديث حالة المطبخ
+      checkAndArchiveCompletedOrders();
+    });
+
+    // ==================== 📄 حفظ الفواتير ==================== //
+
+    socket.on('save_printed_invoice', (invoiceData) => {
+
+      if (!invoiceData || typeof invoiceData !== 'object') {
+        return;
+      }
+
+      let invoices = readJsonFile(invoicesFile);
+
+      const orderId = invoiceData.orderId || invoiceData.id;
+
+      const exists = invoices.some(
+        (inv) => (inv.orderId || inv.id) === orderId
+      );
+
+      if (!exists) {
+
+        invoices.push({
+          ...invoiceData,
+          createdAt: invoiceData.createdAt || getLocalDateTimeString()
+        });
+
+        const saved = writeJsonFile(invoicesFile, invoices);
+
+        if (!saved) {
+          console.error('❌ فشل حفظ الفاتورة');
+          return;
+        }
+      }
+
+      io.emit('admin_new_invoice_saved', invoiceData);
+
+      console.log(
+        '📄 تم حفظ الفاتورة للطلب:',
+        orderId
+      );
+    });
+
+    // ==================== 👥 جلب الموظفين والسلف والإجازات ==================== //
+
+    socket.on('get_employees', () => {
+
+      const emps = readJsonFile(employeesFile);
+      const advs = readJsonFile(advancesFile);
+      const levs = readJsonFile(leavesFile);
+
+      socket.emit('initial_employees_data', emps);
+      socket.emit('initial_advances_data', advs);
+      socket.emit('initial_leaves_data', levs);
+
+      console.log(
+        `📥 طلب بيانات الموظفين والسلف والإجازات من الجهاز: ${socket.id}`
+      );
+
+      console.log(
+        `👥 تم إرسال ${emps.length} موظف | 💸 ${advs.length} سلفة | 🌴 ${levs.length} إجازة`
+      );
+    });
+
+    // ==================== 📊 التقرير اليومي وإغلاق الصندوق (الحذف الوحيد للطلبات) ==================== //
+
+    socket.on('close_register_and_send_report', (reportData) => {
+
+      if (!reportData || typeof reportData !== 'object') return;
+
+      let reports = readJsonFile(reportsFile);
+
+      reports.push({
+        ...reportData,
+        closedAt: getLocalDateTimeString()
+      });
+
+      const saved = writeJsonFile(reportsFile, reports);
+
+      if (!saved) {
+        console.error('❌ فشل حفظ التقرير اليومي');
+        return;
+      }
+
+      // 🧹 التطهير الجذري الكامل للذاكرة وملف القرص الدائم للطلبات حصراً عند إغلاق الصندوق نهاية اليوم المالي
+      serverActiveOrders = [];
+      saveActiveOrders();
+
+      kitchenOrders = [];
+      saveKitchenOrders(); 
+
+      // إبقاء إشعار تفريغ الشاشات لكافة الأجهزة لبداية يوم جديد نظيف
+      io.emit('initial_orders', []);
+      io.emit('initial_kitchen_orders', []);
+      io.emit('admin_daily_report_received', reportData);
+
+      console.log(
+        '📊 تم حفظ التقرير المالي اليومي وتفريغ الذاكرة والطلبات لبداية يوم عمل جديد بنجاح 🚀'
+      );
+    });
+
+    // ==================== 🚨 إلغاء الطلب من الكاشير ==================== //
+
+    socket.on('cancel_order_to_admin', (cancelData) => {
+
+      if (!cancelData || typeof cancelData !== 'object') return;
+
+      const orderId = normalizeOrderId(
+        cancelData.orderId ?? cancelData.id
+      );
+
+      if (!orderId) return;
+
+      let invoices = readJsonFile(invoicesFile);
+
+      invoices = invoices.filter(
+        (inv) => normalizeOrderId(inv.orderId || inv.id) !== orderId
+      );
+
+      writeJsonFile(invoicesFile, invoices);
+
+      let cancelledOrders = readJsonFile(cancelledFile);
+
+      // 🛡️ التحقق مما إذا كان الطلب الملغى موجوداً مسبقاً لمنع التكرار
+      const exists = cancelledOrders.some(
+        (ord) => normalizeOrderId(ord.orderId || ord.id) === orderId
+      );
+
+      if (!exists) {
+        cancelledOrders.push({
+          ...cancelData,
+          cancelledAt: getLocalDateTimeString()
+        });
+        writeJsonFile(cancelledFile, cancelledOrders);
+      }
+
+      // 🛑 حذف الطلب حصراً عند طلب الإلغاء الصريح من الكاشير وحفظ التغيير الدائم
+      serverActiveOrders = serverActiveOrders.filter(
+        (o) => getKitchenOrderId(o) !== orderId
+      );
+      saveActiveOrders();
+
+      removeKitchenOrder(orderId);
 
       if (kitchenTimers[orderId]) {
 
         clearTimeout(kitchenTimers[orderId]);
         delete kitchenTimers[orderId];
-
-        console.log(
-          `✅ تم إيقاف مؤقت الطلب #${orderId}`
-        );
       }
-    }
 
-    // 🔍 فحص الأرشفة عند تحديث حالة المطبخ
-    checkAndArchiveCompletedOrders();
-  });
+      const kitchenCancellationUpdate = {
+        ...cancelData,
+        id: orderId,
+        orderId: orderId,
+        status: 'cancelled'
+      };
 
-  // ==================== 📄 حفظ الفواتير ==================== //
+      io.emit('kitchen_order_updated', kitchenCancellationUpdate);
 
-  socket.on('save_printed_invoice', (invoiceData) => {
+      io.emit('admin_order_cancelled', cancelData);
 
-    if (!invoiceData || typeof invoiceData !== 'object') {
-      return;
-    }
-
-    let invoices = readJsonFile(invoicesFile);
-
-    const orderId = invoiceData.orderId || invoiceData.id;
-
-    const exists = invoices.some(
-      (inv) => (inv.orderId || inv.id) === orderId
-    );
-
-    if (!exists) {
-
-      invoices.push({
-        ...invoiceData,
-        createdAt: invoiceData.createdAt || getLocalDateTimeString()
+      io.emit('update_admin_invoices', {
+        orderId: orderId,
+        status: 'DELETED_AND_CANCELLED'
       });
 
-      const saved = writeJsonFile(invoicesFile, invoices);
+      io.emit('order_cancelled_by_cashier', cancelData);
+
+      io.emit('order_removed_broadcast', { orderId: orderId });
+
+      // بث القائمة المحدثة وغير المكررة لجميع لوحات المديرين المتصلة
+      io.emit('initial_cancelled_orders', cancelledOrders);
+
+      console.log(
+        `🚨 تم إلغاء الطلب #${orderId} وحذفه بناءً على طلب الكاشير. السبب: ${cancelData.cancellationReason || 'بدون سبب'}`
+      );
+    });
+
+    // ==================== 🚫 إلغاء الطلب للزبون ==================== //
+
+    socket.on('cancel_order_to_customer', (cancelData) => {
+
+      if (!cancelData || typeof cancelData !== 'object') return;
+
+      io.emit('order_cancelled_by_cashier', cancelData);
+
+      console.log(
+        '🚨 تم إرسال إشعار إلغاء الطلب للزبون'
+      );
+    });
+
+    // ==================== ⭐ تقييمات العملاء ==================== //
+
+    socket.on('submit_rating', (ratingData) => {
+
+      if (!ratingData || typeof ratingData !== 'object') return;
+
+      let ratings = readJsonFile(ratingsFile);
+
+      ratings.push({
+        ...ratingData,
+        createdAt: getLocalDateTimeString()
+      });
+
+      const saved = writeJsonFile(ratingsFile, ratings);
 
       if (!saved) {
-        console.error('❌ فشل حفظ الفاتورة');
+        console.error('❌ فشل حفظ التقييم');
         return;
       }
-    }
 
-    io.emit('admin_new_invoice_saved', invoiceData);
+      io.emit('admin_new_rating', ratingData);
 
-    console.log(
-      '📄 تم حفظ الفاتورة للطلب:',
-      orderId
-    );
-  });
-
-  // ==================== 👥 جلب الموظفين والسلف والإجازات ==================== //
-
-  socket.on('get_employees', () => {
-
-    const emps = readJsonFile(employeesFile);
-    const advs = readJsonFile(advancesFile);
-    const levs = readJsonFile(leavesFile);
-
-    socket.emit('initial_employees_data', emps);
-    socket.emit('initial_advances_data', advs);
-    socket.emit('initial_leaves_data', levs);
-
-    console.log(
-      `📥 طلب بيانات الموظفين والسلف والإجازات من الجهاز: ${socket.id}`
-    );
-
-    console.log(
-      `👥 تم إرسال ${emps.length} موظف | 💸 ${advs.length} سلفة | 🌴 ${levs.length} إجازة`
-    );
-  });
-
-  // ==================== 📊 التقرير اليومي وإغلاق الصندوق (الحذف الوحيد للطلبات) ==================== //
-
-  socket.on('close_register_and_send_report', (reportData) => {
-
-    if (!reportData || typeof reportData !== 'object') return;
-
-    let reports = readJsonFile(reportsFile);
-
-    reports.push({
-      ...reportData,
-      closedAt: getLocalDateTimeString()
+      console.log(
+        '⭐ تم حفظ التقييم وإرساله للمدير'
+      );
     });
 
-    const saved = writeJsonFile(reportsFile, reports);
+    // ==================== 🔴 قطع الاتصال وحماية الذاكرة من الكيلد ==================== //
 
-    if (!saved) {
-      console.error('❌ فشل حفظ التقرير اليومي');
-      return;
-    }
-
-    // 🧹 التطهير الجذري الكامل للذاكرة وملف القرص الدائم للطلبات حصراً عند إغلاق الصندوق نهاية اليوم المالي
-    serverActiveOrders = [];
-    saveActiveOrders();
-
-    kitchenOrders = [];
-    saveKitchenOrders(); 
-
-    // إبقاء إشعار تفريغ الشاشات لكافة الأجهزة لبداية يوم جديد نظيف
-    io.emit('initial_orders', []);
-    io.emit('initial_kitchen_orders', []);
-    io.emit('admin_daily_report_received', reportData);
-
-    console.log(
-      '📊 تم حفظ التقرير المالي اليومي وتفريغ الذاكرة والطلبات لبداية يوم عمل جديد بنجاح 🚀'
-    );
-  });
-
-  // ==================== 🚨 إلغاء الطلب من الكاشير ==================== //
-
-  socket.on('cancel_order_to_admin', (cancelData) => {
-
-    if (!cancelData || typeof cancelData !== 'object') return;
-
-    const orderId = normalizeOrderId(
-      cancelData.orderId ?? cancelData.id
-    );
-
-    if (!orderId) return;
-
-    let invoices = readJsonFile(invoicesFile);
-
-    invoices = invoices.filter(
-      (inv) => normalizeOrderId(inv.orderId || inv.id) !== orderId
-    );
-
-    writeJsonFile(invoicesFile, invoices);
-
-    let cancelledOrders = readJsonFile(cancelledFile);
-
-    cancelledOrders.push({
-      ...cancelData,
-      cancelledAt: getLocalDateTimeString()
+    socket.on('disconnect', () => {
+      socket.removeAllListeners();
     });
 
-    writeJsonFile(cancelledFile, cancelledOrders);
+  });
 
-    // 🛑 حذف الطلب حصراً عند طلب الإلغاء الصريح من الكاشير وحفظ التغيير الدائم
-    serverActiveOrders = serverActiveOrders.filter(
-      (o) => getKitchenOrderId(o) !== orderId
-    );
-    saveActiveOrders();
+  // ==================== 🚀 تشغيل السيرفر ==================== //
 
-    removeKitchenOrder(orderId);
+  const PORT = process.env.PORT || 3000;
 
-    if (kitchenTimers[orderId]) {
-
-      clearTimeout(kitchenTimers[orderId]);
-      delete kitchenTimers[orderId];
-    }
-
-    const kitchenCancellationUpdate = {
-      ...cancelData,
-      id: orderId,
-      orderId: orderId,
-      status: 'cancelled'
-    };
-
-    io.emit('kitchen_order_updated', kitchenCancellationUpdate);
-
-    io.emit('admin_order_cancelled', cancelData);
-
-    io.emit('update_admin_invoices', {
-      orderId: orderId,
-      status: 'DELETED_AND_CANCELLED'
-    });
-
-    io.emit('order_cancelled_by_cashier', cancelData);
-
-    io.emit('order_removed_broadcast', { orderId: orderId });
+  server.listen(PORT, () => {
 
     console.log(
-      `🚨 تم إلغاء الطلب #${orderId} وحذفه بناءً على طلب الكاشير. السبب: ${cancelData.cancellationReason || 'بدون سبب'}`
+      `🚀 السيرفر يعمل بنجاح على المنفذ ${PORT}`
     );
-  });
-
-  // ==================== 🚫 إلغاء الطلب للزبون ==================== //
-
-  socket.on('cancel_order_to_customer', (cancelData) => {
-
-    if (!cancelData || typeof cancelData !== 'object') return;
-
-    io.emit('order_cancelled_by_cashier', cancelData);
 
     console.log(
-      '🚨 تم إرسال إشعار إلغاء الطلب للزبون'
+      `📦 عدد الطلبات النشطة المسترجعة من القرص الدائم: ${serverActiveOrders.length}`
     );
-  });
-
-  // ==================== ⭐ تقييمات العملاء ==================== //
-
-  socket.on('submit_rating', (ratingData) => {
-
-    if (!ratingData || typeof ratingData !== 'object') return;
-
-    let ratings = readJsonFile(ratingsFile);
-
-    ratings.push({
-      ...ratingData,
-      createdAt: getLocalDateTimeString()
-    });
-
-    const saved = writeJsonFile(ratingsFile, ratings);
-
-    if (!saved) {
-      console.error('❌ فشل حفظ التقييم');
-      return;
-    }
-
-    io.emit('admin_new_rating', ratingData);
 
     console.log(
-      '⭐ تم حفظ التقييم وإرساله للمدير'
+      `🍳 عدد طلبات المطبخ المسترجعة: ${kitchenOrders.length}`
     );
+
+    console.log(
+      `👥 عدد الموظفين المحفوظين: ${readJsonFile(employeesFile).length}`
+    );
+
+    console.log(
+      `💸 عدد السلف والدفعات المحفوظة: ${readJsonFile(advancesFile).length}`
+    );
+
+    console.log(
+      `🌴 عدد الإجازات المحفوظة: ${readJsonFile(leavesFile).length}`
+    );
+
+    console.log(
+      '✅ ملفات الموظفين والسلف والإجازات والطلبات النشطة لن يتم تصفيرها عند إعادة تشغيل السيرفر وانقطاع التيار'
+    );
+
+    console.log('');
+    console.log('================ مزامنة البيانات والرواتب ================');
+    console.log('📁 ملف الموظفين:', employeesFile);
+    console.log('📁 ملف السلف والدفعات:', advancesFile);
+    console.log('📁 ملف الإجازات:', leavesFile);
+    console.log('📁 ملف الطلبات النشطة الدائم:', activeOrdersFile);
+    console.log('=========================================================');
   });
-
-  // ==================== 🔴 قطع الاتصال وحماية الذاكرة من الكيلد ==================== //
-
-  socket.on('disconnect', () => {
-    socket.removeAllListeners();
-  });
-
-});
-
-// ==================== 🚀 تشغيل السيرفر ==================== //
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-
-  console.log(
-    `🚀 السيرفر يعمل بنجاح على المنفذ ${PORT}`
-  );
-
-  console.log(
-    `📦 عدد الطلبات النشطة المسترجعة من القرص الدائم: ${serverActiveOrders.length}`
-  );
-
-  console.log(
-    `🍳 عدد طلبات المطبخ المسترجعة: ${kitchenOrders.length}`
-  );
-
-  console.log(
-    `👥 عدد الموظفين المحفوظين: ${readJsonFile(employeesFile).length}`
-  );
-
-  console.log(
-    `💸 عدد السلف والدفعات المحفوظة: ${readJsonFile(advancesFile).length}`
-  );
-
-  console.log(
-    `🌴 عدد الإجازات المحفوظة: ${readJsonFile(leavesFile).length}`
-  );
-
-  console.log(
-    '✅ ملفات الموظفين والسلف والإجازات والطلبات النشطة لن يتم تصفيرها عند إعادة تشغيل السيرفر وانقطاع التيار'
-  );
-
-  console.log('');
-  console.log('================ مزامنة البيانات والرواتب ================');
-  console.log('📁 ملف الموظفين:', employeesFile);
-  console.log('📁 ملف السلف والدفعات:', advancesFile);
-  console.log('📁 ملف الإجازات:', leavesFile);
-  console.log('📁 ملف الطلبات النشطة الدائم:', activeOrdersFile);
-  console.log('=========================================================');
-});
